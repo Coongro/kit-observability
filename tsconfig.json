@@ -30,6 +30,24 @@
       ],
       "@coongro/plugin-sdk/*": [
         "../../packages/plugin-sdk/dist/*"
+      ],
+      "@coongro/core-logging": [
+        "../../packages/core-logging/dist/index.d.ts"
+      ],
+      "@coongro/core-logging/*": [
+        "../../packages/core-logging/dist/*"
+      ],
+      "@coongro/database-core": [
+        "../../packages/database-core/dist/index.d.ts"
+      ],
+      "@coongro/database-core/*": [
+        "../../packages/database-core/dist/*"
+      ],
+      "@coongro/module-core": [
+        "../../packages/module-core/dist/index.d.ts"
+      ],
+      "@coongro/module-core/*": [
+        "../../packages/module-core/dist/*"
       ]
     }
   },

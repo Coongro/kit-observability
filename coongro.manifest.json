@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "apiVersion": "2.0",
   "runtime": "eager",
+  "entry": "./dist/server.js",
   "assets": {
     "styles": [
       "./dist/assets/tailwind.css",
@@ -12,6 +13,14 @@
   "contributes": {
     "menus": [],
     "views": [],
-    "repositories": []
+    "repositories": [],
+    "scheduledTasks": [
+      {
+        "id": "maintenance",
+        "cron": "0 * * * *",
+        "handler": "./dist/crons/maintenance.js",
+        "export": "runMaintenance"
+      }
+    ]
   }
 }
