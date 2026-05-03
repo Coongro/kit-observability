@@ -35,35 +35,36 @@ export async function registerPartitions(
   const manager = new PartitionManager(raw);
   await manager.initialize();
 
-  const entriesResult = await manager.register({
-    schemaName: OBSERVABILITY_SCHEMA_NAME,
-    tableName: LOG_ENTRIES_TABLE,
-    partitionColumn: 'timestamp',
-    interval: '1 day',
-    premake: config.partitionPremake,
-    // PartitionManager rechaza retentionKeepTable cuando retention es null —
-    // por eso solo se incluye el field cuando retention efectivamente aplica.
-    ...(config.retentionDaysEntries !== null
-      ? { retention: `${config.retentionDaysEntries} days`, retentionKeepTable: false }
-      : {}),
-  });
-  logger.info('log_entries partitions registered', {
-    created: entriesResult.created,
-    parentTable: entriesResult.parentTable,
-  });
+  const partitioned: { tableName: string; partitionColumn: string; retentionDays: number | null }[] =
+    [
+      {
+        tableName: LOG_ENTRIES_TABLE,
+        partitionColumn: 'timestamp',
+        retentionDays: config.retentionDaysEntries,
+      },
+      {
+        tableName: LOG_SPANS_TABLE,
+        partitionColumn: 'start_time',
+        retentionDays: config.retentionDaysSpans,
+      },
+    ];
 
-  const spansResult = await manager.register({
-    schemaName: OBSERVABILITY_SCHEMA_NAME,
-    tableName: LOG_SPANS_TABLE,
-    partitionColumn: 'start_time',
-    interval: '1 day',
-    premake: config.partitionPremake,
-    ...(config.retentionDaysSpans !== null
-      ? { retention: `${config.retentionDaysSpans} days`, retentionKeepTable: false }
-      : {}),
-  });
-  logger.info('log_spans partitions registered', {
-    created: spansResult.created,
-    parentTable: spansResult.parentTable,
-  });
+  for (const { tableName, partitionColumn, retentionDays } of partitioned) {
+    const result = await manager.register({
+      schemaName: OBSERVABILITY_SCHEMA_NAME,
+      tableName,
+      partitionColumn,
+      interval: '1 day',
+      premake: config.partitionPremake,
+      // PartitionManager rechaza retentionKeepTable cuando retention es null —
+      // por eso solo se incluye el field cuando retention efectivamente aplica.
+      ...(retentionDays !== null
+        ? { retention: `${retentionDays} days`, retentionKeepTable: false }
+        : {}),
+    });
+    logger.info(`${tableName} partitions registered`, {
+      created: result.created,
+      parentTable: result.parentTable,
+    });
+  }
 }

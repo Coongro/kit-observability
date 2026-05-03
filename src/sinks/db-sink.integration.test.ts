@@ -23,6 +23,13 @@ const skipIfNoDb = dbUrl === null;
 const ENTRIES = `"${OBSERVABILITY_SCHEMA_NAME}"."${LOG_ENTRIES_TABLE}"`;
 const ISSUES = `"${OBSERVABILITY_SCHEMA_NAME}"."${LOG_ISSUES_TABLE}"`;
 
+// Filtro por source para aislar las assertions del tráfico real del API en
+// dev (cuando el plugin está instalado el API también escribe a la misma
+// tabla concurrentemente). Todos los makeEntry() usan name='test-app'.
+const TEST_SOURCE = 'test-app';
+const ENTRIES_FILTER = `WHERE source = '${TEST_SOURCE}'`;
+const ISSUES_FILTER = `WHERE source = '${TEST_SOURCE}'`;
+
 interface EntryRow {
   message: string;
   level: number;
@@ -72,7 +79,7 @@ describe.skipIf(skipIfNoDb)('DBSink end-to-end (integration — Milestone 2 acce
     sink.write(makeEntry({ level: LogLevel.INFO, message: 'test message' }));
     await sink.flushNow();
 
-    const rows = await sql.unsafe<EntryRow[]>(`SELECT * FROM ${ENTRIES}`);
+    const rows = await sql.unsafe<EntryRow[]>(`SELECT * FROM ${ENTRIES} ${ENTRIES_FILTER}`);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.message).toBe('test message');
     expect(rows[0]?.level).toBe(LogLevel.INFO);
@@ -92,7 +99,7 @@ describe.skipIf(skipIfNoDb)('DBSink end-to-end (integration — Milestone 2 acce
     fastSync.write(makeEntry({ level: LogLevel.ERROR, message: 'boom' }));
     // NO llamamos flushNow(); confiamos en shouldFlushSync
     await waitFor(async () => {
-      const rows = await sql.unsafe<EntryRow[]>(`SELECT message FROM ${ENTRIES}`);
+      const rows = await sql.unsafe<EntryRow[]>(`SELECT message FROM ${ENTRIES} ${ENTRIES_FILTER}`);
       return rows.length === 1 && rows[0]?.message === 'boom';
     }, 1000);
     await fastSync.close();
@@ -104,13 +111,13 @@ describe.skipIf(skipIfNoDb)('DBSink end-to-end (integration — Milestone 2 acce
     }
     await sink.flushNow();
 
-    const entries = await sql.unsafe<EntryRow[]>(`SELECT * FROM ${ENTRIES}`);
+    const entries = await sql.unsafe<EntryRow[]>(`SELECT * FROM ${ENTRIES} ${ENTRIES_FILTER}`);
     expect(entries).toHaveLength(5);
     // todas con mismo fingerprint
     const fps = new Set(entries.map((e) => e.fingerprint));
     expect(fps.size).toBe(1);
 
-    const issues = await sql.unsafe<IssueRow[]>(`SELECT * FROM ${ISSUES}`);
+    const issues = await sql.unsafe<IssueRow[]>(`SELECT * FROM ${ISSUES} ${ISSUES_FILTER}`);
     expect(issues).toHaveLength(1);
     expect(BigInt(issues[0]?.occurrence_count ?? '0')).toBe(5n);
     expect(issues[0]?.sample_message).toBe('something failed');
@@ -137,11 +144,11 @@ describe.skipIf(skipIfNoDb)('DBSink end-to-end (integration — Milestone 2 acce
     );
     await sink.flushNow();
 
-    const entries = await sql.unsafe<EntryRow[]>(`SELECT fingerprint FROM ${ENTRIES}`);
+    const entries = await sql.unsafe<EntryRow[]>(`SELECT fingerprint FROM ${ENTRIES} ${ENTRIES_FILTER}`);
     expect(entries).toHaveLength(3);
     expect(new Set(entries.map((e) => e.fingerprint)).size).toBe(1);
 
-    const issues = await sql.unsafe<IssueRow[]>(`SELECT * FROM ${ISSUES}`);
+    const issues = await sql.unsafe<IssueRow[]>(`SELECT * FROM ${ISSUES} ${ISSUES_FILTER}`);
     expect(issues).toHaveLength(1);
     expect(BigInt(issues[0]?.occurrence_count ?? '0')).toBe(3n);
   });
@@ -151,10 +158,10 @@ describe.skipIf(skipIfNoDb)('DBSink end-to-end (integration — Milestone 2 acce
     sink.write(makeEntry({ level: LogLevel.DEBUG, message: 'just debug' }));
     await sink.flushNow();
 
-    const entries = await sql.unsafe<EntryRow[]>(`SELECT * FROM ${ENTRIES}`);
+    const entries = await sql.unsafe<EntryRow[]>(`SELECT * FROM ${ENTRIES} ${ENTRIES_FILTER}`);
     expect(entries).toHaveLength(2);
 
-    const issues = await sql.unsafe<IssueRow[]>(`SELECT * FROM ${ISSUES}`);
+    const issues = await sql.unsafe<IssueRow[]>(`SELECT * FROM ${ISSUES} ${ISSUES_FILTER}`);
     expect(issues).toHaveLength(0);
   });
 });

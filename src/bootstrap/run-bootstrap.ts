@@ -78,21 +78,17 @@ export async function runBootstrap(raw: Sql, logger: BootstrapLogger): Promise<v
 }
 
 async function applyV1(raw: Sql, logger: BootstrapLogger): Promise<void> {
-  await raw.unsafe(CREATE_LOG_ENTRIES_SQL);
-  for (const stmt of CREATE_LOG_ENTRIES_INDEXES_SQL) {
-    await raw.unsafe(stmt);
-  }
-  logger.info('table log_entries created');
+  const tables: { name: string; createSql: string; indexesSql: readonly string[] }[] = [
+    { name: 'log_entries', createSql: CREATE_LOG_ENTRIES_SQL, indexesSql: CREATE_LOG_ENTRIES_INDEXES_SQL },
+    { name: 'log_spans', createSql: CREATE_LOG_SPANS_SQL, indexesSql: CREATE_LOG_SPANS_INDEXES_SQL },
+    { name: 'log_issues', createSql: CREATE_LOG_ISSUES_SQL, indexesSql: CREATE_LOG_ISSUES_INDEXES_SQL },
+  ];
 
-  await raw.unsafe(CREATE_LOG_SPANS_SQL);
-  for (const stmt of CREATE_LOG_SPANS_INDEXES_SQL) {
-    await raw.unsafe(stmt);
+  for (const { name, createSql, indexesSql } of tables) {
+    await raw.unsafe(createSql);
+    for (const stmt of indexesSql) {
+      await raw.unsafe(stmt);
+    }
+    logger.info(`table ${name} created`);
   }
-  logger.info('table log_spans created');
-
-  await raw.unsafe(CREATE_LOG_ISSUES_SQL);
-  for (const stmt of CREATE_LOG_ISSUES_INDEXES_SQL) {
-    await raw.unsafe(stmt);
-  }
-  logger.info('table log_issues created');
 }

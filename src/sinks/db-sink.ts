@@ -107,10 +107,10 @@ export class DBSink extends SinkBase<LogEntry> implements LogSink {
         e.row.level,
         e.row.source,
         e.row.message,
-        e.row.context !== null ? JSON.stringify(e.row.context) : null,
-        e.row.metadata !== null ? JSON.stringify(e.row.metadata) : null,
-        e.row.error !== null ? JSON.stringify(e.row.error) : null,
-        e.row.call_site !== null ? JSON.stringify(e.row.call_site) : null,
+        jsonOrNull(e.row.context),
+        jsonOrNull(e.row.metadata),
+        jsonOrNull(e.row.error),
+        jsonOrNull(e.row.call_site),
         e.row.fingerprint
       );
     }
@@ -173,6 +173,10 @@ function enrichEntry(entry: LogEntry): EnrichedEntry {
       fingerprint,
     },
   };
+}
+
+function jsonOrNull(value: Record<string, unknown> | null): string | null {
+  return value !== null ? JSON.stringify(value) : null;
 }
 
 function extractStringField(obj: Record<string, unknown> | undefined, key: string): string | null {
