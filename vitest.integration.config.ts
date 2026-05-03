@@ -9,6 +9,8 @@ import { defineConfig } from 'vitest/config';
  * para evitar borrar el schema observability del usuario sin querer).
  */
 export default defineConfig({
+  // Backend-only — desactivar CSS para no requerir autoprefixer en CI.
+  css: false,
   resolve: {
     // Vitest no lee tsconfig paths automáticamente — hay que mapear los
     // workspace packages a sus dist builds para que los integration tests
