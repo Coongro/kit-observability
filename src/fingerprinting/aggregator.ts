@@ -54,30 +54,36 @@ export async function recordIssues(
 ): Promise<void> {
   if (inputs.length === 0) return;
 
-  const rows = inputs.map((i) => ({
-    fingerprint: i.fingerprint,
-    tenant_id: i.tenantId,
-    level: i.level,
-    source: i.source,
-    sample_message: i.sampleMessage,
-    sample_top_frame: i.sampleTopFrame,
-    occurrence_count: i.count,
-  }));
+  const FIELDS_PER_ROW = 7;
+  const placeholders = inputs
+    .map((_, i) => {
+      const o = i * FIELDS_PER_ROW;
+      return `($${o + 1}, $${o + 2}::uuid, $${o + 3}::int, $${o + 4}, $${o + 5}, $${o + 6}, $${o + 7}::bigint, NOW(), NOW())`;
+    })
+    .join(', ');
+
+  const params: (string | number | null)[] = [];
+  for (const i of inputs) {
+    params.push(
+      i.fingerprint,
+      i.tenantId,
+      i.level,
+      i.source,
+      i.sampleMessage,
+      i.sampleTopFrame,
+      i.count
+    );
+  }
 
   await raw.unsafe(
     `INSERT INTO ${TABLE}
        (fingerprint, tenant_id, level, source, sample_message, sample_top_frame, occurrence_count, first_seen_at, last_seen_at)
-     SELECT
-       v.fingerprint, v.tenant_id::uuid, v.level::int, v.source, v.sample_message, v.sample_top_frame, v.occurrence_count::bigint, NOW(), NOW()
-     FROM jsonb_to_recordset($1::jsonb) AS v(
-       fingerprint text, tenant_id text, level int, source text,
-       sample_message text, sample_top_frame text, occurrence_count bigint
-     )
+     VALUES ${placeholders}
      ON CONFLICT (fingerprint) DO UPDATE SET
        occurrence_count = ${LOG_ISSUES_TABLE}.occurrence_count + EXCLUDED.occurrence_count,
        last_seen_at = NOW(),
        sample_message = EXCLUDED.sample_message,
        sample_top_frame = EXCLUDED.sample_top_frame`,
-    [JSON.stringify(rows)]
+    params
   );
 }

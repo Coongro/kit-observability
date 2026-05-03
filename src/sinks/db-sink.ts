@@ -86,28 +86,36 @@ export class DBSink extends SinkBase<LogEntry> implements LogSink {
   private async bulkInsertEntries(enriched: EnrichedEntry[]): Promise<void> {
     if (enriched.length === 0) return;
 
-    const rows = enriched.map((e) => e.row);
+    const FIELDS_PER_ROW = 11;
+    const placeholders = enriched
+      .map((_, i) => {
+        const o = i * FIELDS_PER_ROW;
+        return `($${o + 1}::timestamptz, $${o + 2}::uuid, $${o + 3}, $${o + 4}::int, $${o + 5}, $${o + 6}, $${o + 7}::jsonb, $${o + 8}::jsonb, $${o + 9}::jsonb, $${o + 10}::jsonb, $${o + 11})`;
+      })
+      .join(', ');
+
+    const params: (string | number | null)[] = [];
+    for (const e of enriched) {
+      params.push(
+        e.row.timestamp,
+        e.row.tenant_id,
+        e.row.request_id,
+        e.row.level,
+        e.row.source,
+        e.row.message,
+        e.row.context !== null ? JSON.stringify(e.row.context) : null,
+        e.row.metadata !== null ? JSON.stringify(e.row.metadata) : null,
+        e.row.error !== null ? JSON.stringify(e.row.error) : null,
+        e.row.call_site !== null ? JSON.stringify(e.row.call_site) : null,
+        e.row.fingerprint
+      );
+    }
+
     await this.raw.unsafe(
       `INSERT INTO ${ENTRIES_TABLE}
          (timestamp, tenant_id, request_id, level, source, message, context, metadata, error, call_site, fingerprint)
-       SELECT
-         (v.timestamp)::timestamptz,
-         NULLIF(v.tenant_id, '')::uuid,
-         NULLIF(v.request_id, ''),
-         v.level::int,
-         v.source,
-         v.message,
-         v.context,
-         v.metadata,
-         v.error,
-         v.call_site,
-         v.fingerprint
-       FROM jsonb_to_recordset($1::jsonb) AS v(
-         timestamp text, tenant_id text, request_id text, level int,
-         source text, message text, context jsonb, metadata jsonb,
-         error jsonb, call_site jsonb, fingerprint text
-       )`,
-      [JSON.stringify(rows)]
+       VALUES ${placeholders}`,
+      params
     );
   }
 }

@@ -40,10 +40,11 @@ export async function registerPartitions(
     partitionColumn: 'timestamp',
     interval: '1 day',
     premake: config.partitionPremake,
-    retention: config.retentionDaysEntries !== null
-      ? `${config.retentionDaysEntries} days`
-      : null,
-    retentionKeepTable: false,
+    // PartitionManager rechaza retentionKeepTable cuando retention es null —
+    // por eso solo se incluye el field cuando retention efectivamente aplica.
+    ...(config.retentionDaysEntries !== null
+      ? { retention: `${config.retentionDaysEntries} days`, retentionKeepTable: false }
+      : {}),
   });
   logger.info('log_entries partitions registered', {
     created: entriesResult.created,
@@ -56,10 +57,9 @@ export async function registerPartitions(
     partitionColumn: 'start_time',
     interval: '1 day',
     premake: config.partitionPremake,
-    retention: config.retentionDaysSpans !== null
-      ? `${config.retentionDaysSpans} days`
-      : null,
-    retentionKeepTable: false,
+    ...(config.retentionDaysSpans !== null
+      ? { retention: `${config.retentionDaysSpans} days`, retentionKeepTable: false }
+      : {}),
   });
   logger.info('log_spans partitions registered', {
     created: spansResult.created,
