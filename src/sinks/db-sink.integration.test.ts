@@ -65,14 +65,12 @@ describe.skipIf(skipIfNoDb)('DBSink end-to-end (integration — Milestone 2 acce
     await resetObservabilitySchema(sql);
     await runBootstrap(sql, silentLogger);
     await registerPartitions(sql, baseConfig, silentLogger);
-    sink = new DBSink(
-      { raw: sql },
-      {
-        batchSize: baseConfig.batchSize,
-        batchIntervalMs: baseConfig.batchIntervalMs,
-        failsafe: null,
-      }
-    );
+    sink = new DBSink({
+      raw: sql,
+      batchSize: baseConfig.batchSize,
+      batchIntervalMs: baseConfig.batchIntervalMs,
+      failsafe: null,
+    });
   });
 
   it('Acceptance #1: logger.info() vía sink → fila en log_entries con todos los campos', async () => {
@@ -92,10 +90,12 @@ describe.skipIf(skipIfNoDb)('DBSink end-to-end (integration — Milestone 2 acce
   it('Acceptance #2: logger.error() dispara flush sync (no espera intervalo)', async () => {
     // Sink configurado con batchIntervalMs altísimo — si no fuera flush sync,
     // la fila no aparecería al consultar inmediatamente.
-    const fastSync = new DBSink(
-      { raw: sql },
-      { batchSize: 1000, batchIntervalMs: 99999, failsafe: null }
-    );
+    const fastSync = new DBSink({
+      raw: sql,
+      batchSize: 1000,
+      batchIntervalMs: 99999,
+      failsafe: null,
+    });
     fastSync.write(makeEntry({ level: LogLevel.ERROR, message: 'boom' }));
     // NO llamamos flushNow(); confiamos en shouldFlushSync
     await waitFor(async () => {
@@ -144,7 +144,9 @@ describe.skipIf(skipIfNoDb)('DBSink end-to-end (integration — Milestone 2 acce
     );
     await sink.flushNow();
 
-    const entries = await sql.unsafe<EntryRow[]>(`SELECT fingerprint FROM ${ENTRIES} ${ENTRIES_FILTER}`);
+    const entries = await sql.unsafe<EntryRow[]>(
+      `SELECT fingerprint FROM ${ENTRIES} ${ENTRIES_FILTER}`
+    );
     expect(entries).toHaveLength(3);
     expect(new Set(entries.map((e) => e.fingerprint)).size).toBe(1);
 

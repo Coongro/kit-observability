@@ -16,10 +16,11 @@
  *   tablas particionadas afuera del migration runner igual.
  *
  * Estas definiciones sirven SOLO para queries Drizzle con tipos (insert,
- * select). El DDL real vive en `bootstrap/ddl.ts`. Si hay drift entre
- * schema/ y ddl.ts, los tests de integración del bootstrap lo detectan
- * (verifican que las columnas/tipos del CREATE TABLE coincidan con los
- * inferidos por Drizzle).
+ * select). El DDL real vive en `bootstrap/ddl.ts`. Drifts groseros (columna
+ * faltante, tipo incompatible) los detecta el round-trip insert/select de
+ * los integration tests; drifts sutiles (nullability, defaults) hoy NO se
+ * detectan automáticamente — un seguimiento posible es snapshot de
+ * `pg_attribute` vs Drizzle inference.
  */
 
 export { observabilitySchema, OBSERVABILITY_SCHEMA_NAME } from './observability-schema.js';

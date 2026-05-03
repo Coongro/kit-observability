@@ -35,6 +35,16 @@ export function getRuntimeState(): RuntimeState {
   return current;
 }
 
+/**
+ * Variante non-throwing para usos donde el caller necesita decidir qué hacer
+ * si el plugin no fue activado todavía (ej: deactivate() corriendo en un
+ * proceso donde activate() falló al inicio — todavía queremos limpiar lo
+ * que haya sin tirar otro error encima).
+ */
+export function getRuntimeStateOrNull(): RuntimeState | null {
+  return current;
+}
+
 export function clearRuntimeState(): void {
   current = null;
 }

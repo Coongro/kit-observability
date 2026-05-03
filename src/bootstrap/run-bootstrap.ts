@@ -19,6 +19,7 @@ import {
 
 export interface BootstrapLogger {
   info: (msg: string, meta?: Record<string, unknown>) => void;
+  warn: (msg: string, meta?: Record<string, unknown>) => void;
 }
 
 /**
@@ -27,17 +28,29 @@ export interface BootstrapLogger {
  * Flujo:
  *   1. CREATE EXTENSION pgcrypto (idempotente, para gen_random_uuid).
  *   2. CREATE SCHEMA observability + tabla schema_version (también idempotentes).
- *   3. Lee la versión persistida. Si null → primera install: aplica el DDL de v1.
- *      Si == SCHEMA_VERSION → no-op (re-correr CREATE IF NOT EXISTS sería
- *      seguro pero inútil cada boot).
+ *   3. Lee la versión persistida. Si null → primera install: aplica el DDL de
+ *      v1 dentro de UNA transacción + escribe schema_version atómicamente.
+ *      Si == SCHEMA_VERSION → no-op.
  *      Si < SCHEMA_VERSION → en el futuro habrá `applyMigrations(from, to)`;
  *      por ahora throws (defensa contra deploys raros).
+ *      Si > SCHEMA_VERSION → plugin downgradeado, log warn y skip — el
+ *      higher-version schema puede tener cambios incompatibles que esta
+ *      versión del plugin no entiende; INSERTs subsiguientes pueden fallar.
+ *
+ * Atomicidad: si applyV1 falla a mitad de camino (ej: una de las CREATE INDEX),
+ * la transacción se rollbackea ENTERA y schema_version queda sin escribir →
+ * el siguiente boot re-intenta desde 0. Sin esta transacción, un fallo parcial
+ * dejaba al plugin permanentemente bricked (tablas a medias + constraint
+ * conflicts en re-attempts).
  *
  * IMPORTANTE: este bootstrap solo crea las tablas parent (con PARTITION BY).
  * La creación de las particiones diarias y el maintenance corre aparte vía
  * `partitions/register.ts` que llama `partman.create_parent(...)`.
  */
 export async function runBootstrap(raw: Sql, logger: BootstrapLogger): Promise<void> {
+  // pgcrypto y schema observability se crean fuera de transacción porque CREATE
+  // EXTENSION puede tener side-effects globales y los CREATE SCHEMA/TABLE de
+  // schema_version necesitan poder leerse antes de la transacción de v1.
   await raw.unsafe(ENSURE_PGCRYPTO_SQL);
   logger.info('pgcrypto extension ensured');
 
@@ -50,9 +63,11 @@ export async function runBootstrap(raw: Sql, logger: BootstrapLogger): Promise<v
 
   if (current === null) {
     logger.info(`first install — applying schema v${SCHEMA_VERSION}`);
-    await applyV1(raw, logger);
-    await writeVersion(raw, SCHEMA_VERSION);
-    logger.info(`schema v${SCHEMA_VERSION} applied`);
+    await raw.begin(async (tx) => {
+      await applyV1(tx as unknown as Sql, logger);
+      await writeVersion(tx as unknown as Sql, SCHEMA_VERSION);
+    });
+    logger.info(`schema v${SCHEMA_VERSION} applied (transactional)`);
     return;
   }
 
@@ -62,26 +77,39 @@ export async function runBootstrap(raw: Sql, logger: BootstrapLogger): Promise<v
   }
 
   if (current < SCHEMA_VERSION) {
-    // Cuando se agregue v2+, este branch invoca `applyMigrations(current, SCHEMA_VERSION)`.
-    // Mientras solo exista v1, este path es inalcanzable — el throw es defensa
-    // contra un downgrade del plugin con upgrade previo de schema.
     throw new Error(
       `[kit-observability] schema_version ${current} < plugin SCHEMA_VERSION ${SCHEMA_VERSION}, ` +
         `but no migrations are registered yet. Add a migration in bootstrap/migrations/ and bump SCHEMA_VERSION.`
     );
   }
 
-  // current > SCHEMA_VERSION — plugin downgradeado. No tocamos nada.
-  logger.info(
-    `schema at v${current} but plugin expects v${SCHEMA_VERSION}; assuming forward-compatible, skipping bootstrap`
+  // current > SCHEMA_VERSION — plugin downgradeado.
+  // No re-aplicamos v1: el schema higher-version puede tener columnas
+  // incompatibles que romperían los CREATE TABLE IF NOT EXISTS implícitos.
+  // El warn comunica claramente que es best-effort: callers no deberían
+  // downgradear en producción.
+  logger.warn(
+    `schema at v${current} but plugin expects v${SCHEMA_VERSION}; downgrade detected — skipping bootstrap. Subsequent INSERTs may fail if the higher-version schema is incompatible with this plugin version.`
   );
 }
 
 async function applyV1(raw: Sql, logger: BootstrapLogger): Promise<void> {
   const tables: { name: string; createSql: string; indexesSql: readonly string[] }[] = [
-    { name: 'log_entries', createSql: CREATE_LOG_ENTRIES_SQL, indexesSql: CREATE_LOG_ENTRIES_INDEXES_SQL },
-    { name: 'log_spans', createSql: CREATE_LOG_SPANS_SQL, indexesSql: CREATE_LOG_SPANS_INDEXES_SQL },
-    { name: 'log_issues', createSql: CREATE_LOG_ISSUES_SQL, indexesSql: CREATE_LOG_ISSUES_INDEXES_SQL },
+    {
+      name: 'log_entries',
+      createSql: CREATE_LOG_ENTRIES_SQL,
+      indexesSql: CREATE_LOG_ENTRIES_INDEXES_SQL,
+    },
+    {
+      name: 'log_spans',
+      createSql: CREATE_LOG_SPANS_SQL,
+      indexesSql: CREATE_LOG_SPANS_INDEXES_SQL,
+    },
+    {
+      name: 'log_issues',
+      createSql: CREATE_LOG_ISSUES_SQL,
+      indexesSql: CREATE_LOG_ISSUES_INDEXES_SQL,
+    },
   ];
 
   for (const { name, createSql, indexesSql } of tables) {

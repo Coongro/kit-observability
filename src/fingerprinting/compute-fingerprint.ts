@@ -3,7 +3,13 @@ import { createHash } from 'node:crypto';
 import { normalizeMessage } from './normalize-message.js';
 
 export interface ComputeFingerprintInput {
-  level: number | string;
+  /**
+   * Numeric LogLevel (10/20/30/40/50). NO usamos `number | string` para
+   * evitar inconsistencias silenciosas — `{level: 40}` y `{level: '40'}`
+   * darían el mismo hash via template literal coerce, pero `{level: 'error'}`
+   * daría uno distinto.
+   */
+  level: number;
   source: string;
   message: string;
   topFrame?: string | null;

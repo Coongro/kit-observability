@@ -151,11 +151,14 @@ describe('SinkBase', () => {
       await Promise.resolve();
 
       expect(failsafe.lines).toEqual(['a', 'b']);
-      expect(sink.getHealth().insertFailures).toBe(1);
-      expect(sink.getHealth().lostInFailsafe).toBe(2);
+      const h = sink.getHealth();
+      expect(h.insertFailures).toBe(1);
+      expect(h.divertedToFailsafe).toBe(2);
+      expect(h.permanentlyLost).toBe(0);
+      expect(h.failsafeWriteErrors).toBe(0);
     });
 
-    it('si no hay failsafe configurado y flushBatch rechaza, los entries se pierden (counted)', async () => {
+    it('si no hay failsafe configurado y flushBatch rechaza, los entries se cuentan como permanentlyLost', async () => {
       const sink = new TestSink(baseOpts({ batchSize: 1, failsafe: null }), () =>
         Promise.reject(new Error('db down'))
       );
@@ -166,30 +169,57 @@ describe('SinkBase', () => {
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(sink.getHealth().insertFailures).toBe(1);
-      expect(sink.getHealth().lostInFailsafe).toBe(0);
+      const h = sink.getHealth();
+      expect(h.insertFailures).toBe(1);
+      expect(h.divertedToFailsafe).toBe(0);
+      expect(h.permanentlyLost).toBe(1);
     });
 
-    it('si el failsafe writer tira, no propaga (último recurso)', async () => {
+    it('si el failsafe writer tira, los entries van a permanentlyLost + failsafeWriteErrors', async () => {
       const failsafe = new RecordingFailsafe();
       failsafe.shouldThrow = true;
-      const sink = new TestSink(baseOpts({ batchSize: 1, failsafe }), () =>
+      const sink = new TestSink(baseOpts({ batchSize: 2, failsafe }), () =>
         Promise.reject(new Error('db down'))
       );
       vi.spyOn(console, 'error').mockImplementation(() => {});
 
       sink.enqueue('a');
+      sink.enqueue('b');
       await vi.runAllTimersAsync();
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(sink.getHealth().insertFailures).toBe(1);
-      expect(sink.getHealth().lostInFailsafe).toBe(0); // no se contó porque tiró
+      const h = sink.getHealth();
+      expect(h.insertFailures).toBe(1);
+      expect(h.divertedToFailsafe).toBe(0);
+      expect(h.permanentlyLost).toBe(2);
+      expect(h.failsafeWriteErrors).toBe(2);
+    });
+  });
+
+  describe('post-close behavior', () => {
+    it('enqueue post-close va al fail-safe en vez de descartar silenciosamente', async () => {
+      const failsafe = new RecordingFailsafe();
+      const sink = new TestSink(baseOpts({ failsafe }));
+      await sink.close();
+
+      sink.enqueue('post-close');
+      expect(failsafe.lines).toEqual(['post-close']);
+      expect(sink.getHealth().divertedToFailsafe).toBe(1);
+      expect(sink.getHealth().permanentlyLost).toBe(0);
+    });
+
+    it('enqueue post-close sin failsafe se cuenta como permanentlyLost', async () => {
+      const sink = new TestSink(baseOpts({ failsafe: null }));
+      await sink.close();
+
+      sink.enqueue('lost');
+      expect(sink.getHealth().permanentlyLost).toBe(1);
     });
   });
 
   describe('getHealth', () => {
-    it('reporta queueLag, insertFailures, lastFlushAt, lostInFailsafe', async () => {
+    it('reporta todos los counters', async () => {
       const sink = new TestSink(baseOpts({ batchSize: 100, batchIntervalMs: 10000 }));
       sink.enqueue('a');
       sink.enqueue('b');
@@ -197,13 +227,24 @@ describe('SinkBase', () => {
       expect(h.queueLag).toBe(2);
       expect(h.insertFailures).toBe(0);
       expect(h.lastFlushAt).toBeNull();
-      expect(h.lostInFailsafe).toBe(0);
+      expect(h.divertedToFailsafe).toBe(0);
+      expect(h.permanentlyLost).toBe(0);
+      expect(h.failsafeWriteErrors).toBe(0);
 
       await sink.flushNow();
       h = sink.getHealth();
       expect(h.queueLag).toBe(0);
       expect(h.lastFlushAt).not.toBeNull();
       expect(h.lastFlushAt).toMatch(/^\d{4}-\d{2}-\d{2}T/); // ISO
+    });
+  });
+
+  describe('constructor validation', () => {
+    it('throwa si batchSize < 1', () => {
+      expect(() => new TestSink(baseOpts({ batchSize: 0 }))).toThrow(/batchSize/);
+    });
+    it('throwa si batchIntervalMs < 1', () => {
+      expect(() => new TestSink(baseOpts({ batchIntervalMs: 0 }))).toThrow(/batchIntervalMs/);
     });
   });
 

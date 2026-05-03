@@ -2,7 +2,11 @@ import type { LogEntry, LogSink } from '@coongro/core-logging';
 import { LogLevel } from '@coongro/core-logging';
 import type { Sql } from 'postgres';
 
-import { preAggregate, recordIssues, type AggregatorInput } from '../fingerprinting/aggregator.js';
+import {
+  preAggregate,
+  recordIssues,
+  type RawAggregatorInput,
+} from '../fingerprinting/aggregator.js';
 import { computeFingerprint } from '../fingerprinting/compute-fingerprint.js';
 import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
 import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
@@ -13,21 +17,28 @@ const ENTRIES_TABLE = `"${OBSERVABILITY_SCHEMA_NAME}"."${LOG_ENTRIES_TABLE}"`;
 
 const SINK_ID = '@coongro/kit-observability:db';
 
+// Shape 8-4-4-4-12 hex. Match relaxed (no version/variant bits chequeados)
+// porque Postgres acepta cualquier UUID con este shape, y los tests/scripts
+// sintéticos suelen usar patrones tipo `11111111-2222-3333-4444-555555555555`
+// que no respetan version/variant pero son válidos para la columna `uuid`.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Sink que persiste log entries a PostgreSQL.
  *
- * Notas:
- *   - Implementa LogSink (write/close) y se registra en el registry global de
- *     `@coongro/core-logging` via `addSink()` desde `activate()` del plugin.
- *   - La spec original mencionaba `pino-abstract-transport`, pero esa
- *     decisión quedó obsoleta cuando COONG-128 introdujo el registry de sinks
- *     en core-logging — Pino vive dentro de core-logging, los sinks de
- *     plugins solo implementan `LogSink`.
+ * Implementa LogSink (write/close) y se registra en el registry global de
+ * `@coongro/core-logging` via `addSink()` desde `activate()` del plugin.
+ * Pino vive dentro de core-logging — los plugins solo implementan LogSink.
+ *
+ * Comportamiento:
  *   - Recibe entries con level ya filtrado por core-logging (via `minLevel`).
  *   - Para entries con `level >= ERROR` flushea sincrónicamente.
  *   - Para entries con `level >= WARN` las suma al aggregator de log_issues.
+ *   - tenant_id en el entry context se valida como UUID antes de pasar al
+ *     INSERT — un valor no-UUID convertía todo el batch en error de Postgres
+ *     y mandaba 50 entries válidos al failsafe.
  */
-export interface DBSinkOptions {
+export interface DBSinkOptions extends Omit<SinkBaseOptions, 'id'> {
   raw: Sql;
   /** Override del `minLevel` por defecto (DEBUG). Útil para reducir volumen. */
   minLevel?: LogLevel;
@@ -39,8 +50,13 @@ export class DBSink extends SinkBase<LogEntry> implements LogSink {
 
   private readonly raw: Sql;
 
-  constructor(opts: DBSinkOptions, base: Omit<SinkBaseOptions, 'id'>) {
-    super({ ...base, id: SINK_ID });
+  constructor(opts: DBSinkOptions) {
+    super({
+      id: SINK_ID,
+      batchSize: opts.batchSize,
+      batchIntervalMs: opts.batchIntervalMs,
+      failsafe: opts.failsafe,
+    });
     this.raw = opts.raw;
     this.minLevel = opts.minLevel ?? LogLevel.DEBUG;
   }
@@ -50,7 +66,7 @@ export class DBSink extends SinkBase<LogEntry> implements LogSink {
    * en `flushBatch()`. write() debe ser sync rápido (contrato del registry).
    */
   write(entry: Readonly<LogEntry>): void {
-    this.enqueue(entry as LogEntry);
+    this.enqueue(entry);
   }
 
   protected override shouldFlushSync(entry: LogEntry): boolean {
@@ -65,14 +81,11 @@ export class DBSink extends SinkBase<LogEntry> implements LogSink {
     const enriched = batch.map(enrichEntry);
     await this.bulkInsertEntries(enriched);
 
-    // Comparación numérica explícita: e.row.level es number (copiado del
-    // entry original), LogLevel es enum numérico. eslint-disable evita el
-    // false positive de no-unsafe-enum-comparison sobre enums numéricos.
-    const warnLevel: number = LogLevel.WARN;
     const aggregatorInputs = enriched
-      .filter((e) => e.row.level >= warnLevel)
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
+      .filter((e) => e.row.level >= LogLevel.WARN)
       .map(
-        (e): Omit<AggregatorInput, 'count'> => ({
+        (e): RawAggregatorInput => ({
           fingerprint: e.row.fingerprint,
           tenantId: e.row.tenant_id,
           level: e.row.level,
@@ -145,7 +158,7 @@ interface EnrichedEntry {
 }
 
 function enrichEntry(entry: LogEntry): EnrichedEntry {
-  const tenantId = extractStringField(entry.context, 'tenantId');
+  const tenantId = extractUuidField(entry.context, 'tenantId');
   const requestId = extractStringField(entry.context, 'requestId');
   const source = entry.name ?? 'app';
   const topFrame = extractTopFrame(entry);
@@ -185,12 +198,25 @@ function extractStringField(obj: Record<string, unknown> | undefined, key: strin
   return typeof v === 'string' && v.length > 0 ? v : null;
 }
 
+/**
+ * Extrae un campo solo si es un UUID válido. Los entries con tenantId no-UUID
+ * (ej: 'system') hacían fallar el INSERT entero del batch porque la columna
+ * `tenant_id` es uuid. Un solo entry inválido envenenaba hasta 50 entries
+ * válidos al fail-safe. Filtrar acá los degrada a tenant_id=NULL en vez.
+ */
+function extractUuidField(obj: Record<string, unknown> | undefined, key: string): string | null {
+  const raw = extractStringField(obj, key);
+  if (raw === null) return null;
+  return UUID_RE.test(raw) ? raw : null;
+}
+
 function extractTopFrame(entry: LogEntry): string | null {
   // Preferimos el callSite (formato estructurado del facade) si está.
-  if (entry.callSite !== undefined) {
-    const cs = entry.callSite as { file?: string; line?: number; function?: string };
+  if (entry.callSite !== undefined && entry.callSite !== null) {
+    const cs = entry.callSite as { file?: unknown; line?: unknown; function?: unknown };
     if (typeof cs.file === 'string' && typeof cs.line === 'number') {
-      return `${cs.function ?? '<anonymous>'} (${cs.file}:${cs.line})`;
+      const fn = typeof cs.function === 'string' ? cs.function : '<anonymous>';
+      return `${fn} (${cs.file}:${cs.line})`;
     }
   }
   // Sino, primera línea no-vacía del stack del error serializado.

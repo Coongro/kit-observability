@@ -8,6 +8,7 @@ import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
 
 export interface RegisterPartitionsLogger {
   info: (msg: string, meta?: Record<string, unknown>) => void;
+  warn: (msg: string, meta?: Record<string, unknown>) => void;
 }
 
 /**
@@ -23,9 +24,10 @@ export interface RegisterPartitionsLogger {
  * Idempotente — `PartitionManager.register()` retorna `{ created: false }`
  * si ya estaba en `part_config`.
  *
- * Diseñado para que G2 (SpanSink) y G4 (retention agresiva) no necesiten
- * agregar tablas nuevas: este módulo cubre todas las particionadas del plugin
- * (entries + spans). Si en el futuro hay otra, solo se suma una llamada acá.
+ * Cubre las dos tablas particionadas del plugin (entries + spans). SpanSink
+ * (COONG-143) y retention agresiva (COONG-145) reutilizan esto sin tocar
+ * este archivo — si hay una particionada nueva en el futuro, se suma a
+ * `partitioned[]` de abajo.
  */
 export async function registerPartitions(
   raw: Sql,
@@ -35,19 +37,22 @@ export async function registerPartitions(
   const manager = new PartitionManager(raw);
   await manager.initialize();
 
-  const partitioned: { tableName: string; partitionColumn: string; retentionDays: number | null }[] =
-    [
-      {
-        tableName: LOG_ENTRIES_TABLE,
-        partitionColumn: 'timestamp',
-        retentionDays: config.retentionDaysEntries,
-      },
-      {
-        tableName: LOG_SPANS_TABLE,
-        partitionColumn: 'start_time',
-        retentionDays: config.retentionDaysSpans,
-      },
-    ];
+  const partitioned: {
+    tableName: string;
+    partitionColumn: string;
+    retentionDays: number | null;
+  }[] = [
+    {
+      tableName: LOG_ENTRIES_TABLE,
+      partitionColumn: 'timestamp',
+      retentionDays: config.retentionDaysEntries,
+    },
+    {
+      tableName: LOG_SPANS_TABLE,
+      partitionColumn: 'start_time',
+      retentionDays: config.retentionDaysSpans,
+    },
+  ];
 
   for (const { tableName, partitionColumn, retentionDays } of partitioned) {
     const result = await manager.register({
