@@ -1,10 +1,13 @@
-import type { ModuleActivationContext } from '@coongro/module-core';
 import { addSink } from '@coongro/core-logging';
-import { loadConfig } from '../config.js';
+import type { ModuleActivationContext } from '@coongro/module-core';
+
 import { runBootstrap } from '../bootstrap/run-bootstrap.js';
+import { loadConfig } from '../config.js';
 import { registerPartitions } from '../partitions/register.js';
 import { DBSink } from '../sinks/db-sink.js';
 import { FileFailsafeWriter } from '../sinks/failsafe-writer.js';
+
+import { adaptLogger } from './compat-logger.js';
 import { setRuntimeState } from './state.js';
 
 /**
@@ -24,7 +27,7 @@ import { setRuntimeState } from './state.js';
  *   8. Guardar runtime state para que el cron handler (maintenance) acceda.
  */
 export async function activate(context: ModuleActivationContext): Promise<void> {
-  const logger = context.api.logger;
+  const logger = adaptLogger(context.api.logger);
 
   if (!context.api.systemDatabase) {
     throw new Error(

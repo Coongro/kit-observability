@@ -1,14 +1,12 @@
-import type { Sql } from 'postgres';
 import type { LogEntry, LogSink } from '@coongro/core-logging';
 import { LogLevel } from '@coongro/core-logging';
-import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
-import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
+import type { Sql } from 'postgres';
+
+import { preAggregate, recordIssues, type AggregatorInput } from '../fingerprinting/aggregator.js';
 import { computeFingerprint } from '../fingerprinting/compute-fingerprint.js';
-import {
-  preAggregate,
-  recordIssues,
-  type AggregatorInput,
-} from '../fingerprinting/aggregator.js';
+import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
+import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
+
 import { SinkBase, type SinkBaseOptions } from './sink-base.js';
 
 const ENTRIES_TABLE = `"${OBSERVABILITY_SCHEMA_NAME}"."${LOG_ENTRIES_TABLE}"`;
@@ -67,16 +65,22 @@ export class DBSink extends SinkBase<LogEntry> implements LogSink {
     const enriched = batch.map(enrichEntry);
     await this.bulkInsertEntries(enriched);
 
+    // Comparación numérica explícita: e.row.level es number (copiado del
+    // entry original), LogLevel es enum numérico. eslint-disable evita el
+    // false positive de no-unsafe-enum-comparison sobre enums numéricos.
+    const warnLevel: number = LogLevel.WARN;
     const aggregatorInputs = enriched
-      .filter((e) => e.row.level >= LogLevel.WARN)
-      .map((e): Omit<AggregatorInput, 'count'> => ({
-        fingerprint: e.row.fingerprint,
-        tenantId: e.row.tenant_id,
-        level: e.row.level,
-        source: e.row.source,
-        sampleMessage: e.entry.message,
-        sampleTopFrame: e.topFrame,
-      }));
+      .filter((e) => e.row.level >= warnLevel)
+      .map(
+        (e): Omit<AggregatorInput, 'count'> => ({
+          fingerprint: e.row.fingerprint,
+          tenantId: e.row.tenant_id,
+          level: e.row.level,
+          source: e.row.source,
+          sampleMessage: e.entry.message,
+          sampleTopFrame: e.topFrame,
+        })
+      );
 
     if (aggregatorInputs.length > 0) {
       await recordIssues(this.raw, preAggregate(aggregatorInputs));
@@ -171,10 +175,7 @@ function enrichEntry(entry: LogEntry): EnrichedEntry {
   };
 }
 
-function extractStringField(
-  obj: Record<string, unknown> | undefined,
-  key: string
-): string | null {
+function extractStringField(obj: Record<string, unknown> | undefined, key: string): string | null {
   if (obj === undefined) return null;
   const v = obj[key];
   return typeof v === 'string' && v.length > 0 ? v : null;

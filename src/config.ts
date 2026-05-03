@@ -10,17 +10,12 @@ function positiveInt(raw: string | undefined, fallback: number, name: string): n
   if (raw === undefined || raw === '') return fallback;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(
-      `[kit-observability] env ${name} must be a positive integer, got "${raw}"`
-    );
+    throw new Error(`[kit-observability] env ${name} must be a positive integer, got "${raw}"`);
   }
   return parsed;
 }
 
-function optionalPositiveInt(
-  raw: string | undefined,
-  name: string
-): number | null {
+function optionalPositiveInt(raw: string | undefined, name: string): number | null {
   if (raw === undefined || raw === '') return null;
   return positiveInt(raw, 0, name);
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { preAggregate } from './aggregator.js';
 
 describe('preAggregate', () => {
@@ -60,7 +61,9 @@ describe('preAggregate', () => {
   });
 });
 
-function base(overrides: Partial<Parameters<typeof preAggregate>[0][number]> & { fingerprint: string }) {
+function base(
+  overrides: Partial<Parameters<typeof preAggregate>[0][number]> & { fingerprint: string }
+) {
   return {
     fingerprint: overrides.fingerprint,
     level: 40,

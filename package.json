@@ -1,6 +1,6 @@
 {
   "name": "@coongro/kit-observability",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Sistema propio de observability: logs estructurados, traces y agregación de issues. Reemplaza Winston en el API y expone HTTP endpoints + MCP tools para query.",
   "main": "dist/index.js",
@@ -23,7 +23,7 @@
   ],
   "scripts": {
     "prepare": "husky",
-    "build": "npm run build:css && npm run copy:fontawesome && tsc",
+    "build": "npm run build:css && npm run copy:fontawesome && tsc -p tsconfig.build.json",
     "build:css": "tailwindcss -c tailwind.config.cjs -i ./src/styles/tailwind.css -o ./dist/assets/tailwind.css --minify",
     "copy:fontawesome": "node scripts/copy-fontawesome.cjs",
     "dev": "npm run build:css && tsc --watch",

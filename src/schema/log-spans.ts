@@ -1,12 +1,5 @@
-import {
-  bigint,
-  index,
-  integer,
-  jsonb,
-  primaryKey,
-  text,
-  timestamp,
-} from 'drizzle-orm/pg-core';
+import { bigint, index, integer, jsonb, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
+
 import { observabilitySchema } from './observability-schema.js';
 
 export const LOG_SPANS_TABLE = 'log_spans';

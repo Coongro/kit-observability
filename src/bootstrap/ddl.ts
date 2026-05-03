@@ -1,7 +1,7 @@
-import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
 import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
-import { LOG_SPANS_TABLE } from '../schema/log-spans.js';
 import { LOG_ISSUES_TABLE } from '../schema/log-issues.js';
+import { LOG_SPANS_TABLE } from '../schema/log-spans.js';
+import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
 
 /**
  * DDL idempotente del plugin. Generado como strings constantes para testabilidad

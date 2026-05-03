@@ -1,4 +1,5 @@
 import type { Sql } from 'postgres';
+
 import {
   CREATE_LOG_ENTRIES_INDEXES_SQL,
   CREATE_LOG_ENTRIES_SQL,

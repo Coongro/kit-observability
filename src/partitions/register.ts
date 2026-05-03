@@ -1,9 +1,10 @@
-import type { Sql } from 'postgres';
 import { PartitionManager } from '@coongro/database-core';
-import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
+import type { Sql } from 'postgres';
+
+import type { ObservabilityConfig } from '../config.js';
 import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
 import { LOG_SPANS_TABLE } from '../schema/log-spans.js';
-import type { ObservabilityConfig } from '../config.js';
+import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
 
 export interface RegisterPartitionsLogger {
   info: (msg: string, meta?: Record<string, unknown>) => void;

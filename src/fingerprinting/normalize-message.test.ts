@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { normalizeMessage } from './normalize-message.js';
 
 describe('normalizeMessage', () => {
@@ -39,12 +40,8 @@ describe('normalizeMessage', () => {
   });
 
   it('mensajes que difieren solo en valores dinámicos colapsan al mismo output', () => {
-    const a = normalizeMessage(
-      'tenant 11111111-2222-3333-4444-555555555555 has 12 records'
-    );
-    const b = normalizeMessage(
-      'tenant aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee has 999 records'
-    );
+    const a = normalizeMessage('tenant 11111111-2222-3333-4444-555555555555 has 12 records');
+    const b = normalizeMessage('tenant aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee has 999 records');
     expect(a).toBe(b);
     expect(a).toBe('tenant <uuid> has <num> records');
   });

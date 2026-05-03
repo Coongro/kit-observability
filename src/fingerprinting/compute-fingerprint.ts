@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+
 import { normalizeMessage } from './normalize-message.js';
 
 export interface ComputeFingerprintInput {

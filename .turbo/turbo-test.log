@@ -1,0 +1,18 @@
+
+> @coongro/kit-observability@0.1.0 test A:\Coongro2\Coongro\plugins\kit-observability
+> vitest run
+
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mA:/Coongro2/Coongro/plugins/kit-observability[39m
+
+ [32m✓[39m src/fingerprinting/normalize-message.test.ts [2m ([22m[2m10 tests[22m[2m)[22m[90m 10[2mms[22m[39m
+ [32m✓[39m src/fingerprinting/compute-fingerprint.test.ts [2m ([22m[2m7 tests[22m[2m)[22m[90m 12[2mms[22m[39m
+ [32m✓[39m src/sinks/sink-base.test.ts [2m ([22m[2m14 tests[22m[2m)[22m[90m 37[2mms[22m[39m
+ [32m✓[39m src/sinks/failsafe-writer.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 50[2mms[22m[39m
+ [32m✓[39m src/fingerprinting/aggregator.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[90m 11[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m5 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[32m46 passed[39m[22m[90m (46)[39m
+[2m   Start at [22m 01:04:37
+[2m   Duration [22m 2.88s[2m (transform 528ms, setup 0ms, collect 1.64s, tests 120ms, environment 2ms, prepare 2.43s)[22m
+

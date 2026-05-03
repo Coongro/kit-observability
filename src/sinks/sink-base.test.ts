@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SinkBase, type SinkBaseOptions } from './sink-base.js';
+
 import type { FailsafeWriter } from './failsafe-writer.js';
+import { SinkBase, type SinkBaseOptions } from './sink-base.js';
 
 /**
  * Concrete subclass usado solo para testing de SinkBase.
@@ -47,7 +48,9 @@ class RecordingFailsafe implements FailsafeWriter {
   }
 }
 
-const baseOpts = (overrides: Partial<Omit<SinkBaseOptions, 'id'>> = {}): Omit<SinkBaseOptions, 'id'> => ({
+const baseOpts = (
+  overrides: Partial<Omit<SinkBaseOptions, 'id'>> = {}
+): Omit<SinkBaseOptions, 'id'> => ({
   batchSize: 10,
   batchIntervalMs: 100,
   failsafe: null,
@@ -96,7 +99,10 @@ describe('SinkBase', () => {
       await vi.runAllTimersAsync();
       await Promise.resolve();
       await Promise.resolve();
-      expect(sink.flushed).toEqual([['a', 'b'], ['c', 'd']]);
+      expect(sink.flushed).toEqual([
+        ['a', 'b'],
+        ['c', 'd'],
+      ]);
     });
 
     it('flushNow() drainea el queue actual (sin esperar batch ni timer)', async () => {
@@ -132,9 +138,8 @@ describe('SinkBase', () => {
   describe('fail-safe behavior', () => {
     it('cuando flushBatch rechaza, el batch va al failsafe writer', async () => {
       const failsafe = new RecordingFailsafe();
-      const sink = new TestSink(
-        baseOpts({ batchSize: 2, failsafe }),
-        () => Promise.reject(new Error('db down'))
+      const sink = new TestSink(baseOpts({ batchSize: 2, failsafe }), () =>
+        Promise.reject(new Error('db down'))
       );
       // silenciamos console.error que SinkBase emite en el path de error
       vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -151,9 +156,8 @@ describe('SinkBase', () => {
     });
 
     it('si no hay failsafe configurado y flushBatch rechaza, los entries se pierden (counted)', async () => {
-      const sink = new TestSink(
-        baseOpts({ batchSize: 1, failsafe: null }),
-        () => Promise.reject(new Error('db down'))
+      const sink = new TestSink(baseOpts({ batchSize: 1, failsafe: null }), () =>
+        Promise.reject(new Error('db down'))
       );
       vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -169,9 +173,8 @@ describe('SinkBase', () => {
     it('si el failsafe writer tira, no propaga (último recurso)', async () => {
       const failsafe = new RecordingFailsafe();
       failsafe.shouldThrow = true;
-      const sink = new TestSink(
-        baseOpts({ batchSize: 1, failsafe }),
-        () => Promise.reject(new Error('db down'))
+      const sink = new TestSink(baseOpts({ batchSize: 1, failsafe }), () =>
+        Promise.reject(new Error('db down'))
       );
       vi.spyOn(console, 'error').mockImplementation(() => {});
 

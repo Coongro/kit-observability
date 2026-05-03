@@ -29,12 +29,7 @@ export {
   type NewLogEntryRow,
   LOG_ENTRIES_TABLE,
 } from './log-entries.js';
-export {
-  logSpans,
-  type LogSpanRow,
-  type NewLogSpanRow,
-  LOG_SPANS_TABLE,
-} from './log-spans.js';
+export { logSpans, type LogSpanRow, type NewLogSpanRow, LOG_SPANS_TABLE } from './log-spans.js';
 export {
   logIssues,
   type LogIssueRow,

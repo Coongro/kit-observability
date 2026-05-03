@@ -1,6 +1,7 @@
 import type { Sql } from 'postgres';
-import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
+
 import { LOG_ISSUES_TABLE } from '../schema/log-issues.js';
+import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
 
 export interface AggregatorInput {
   fingerprint: string;
@@ -24,9 +25,7 @@ const TABLE = `"${OBSERVABILITY_SCHEMA_NAME}"."${LOG_ISSUES_TABLE}"`;
  * antes de llamar a `recordIssues` con un batch donde el mismo fingerprint
  * aparece varias veces.
  */
-export function preAggregate(
-  inputs: readonly Omit<AggregatorInput, 'count'>[]
-): AggregatorInput[] {
+export function preAggregate(inputs: readonly Omit<AggregatorInput, 'count'>[]): AggregatorInput[] {
   const byFingerprint = new Map<string, AggregatorInput>();
   for (const input of inputs) {
     const existing = byFingerprint.get(input.fingerprint);
@@ -48,10 +47,7 @@ export function preAggregate(
  * pre-agregación en JS asegura que el contador sea correcto incluso
  * con concurrencia entre múltiples sinks/procesos.
  */
-export async function recordIssues(
-  raw: Sql,
-  inputs: readonly AggregatorInput[]
-): Promise<void> {
+export async function recordIssues(raw: Sql, inputs: readonly AggregatorInput[]): Promise<void> {
   if (inputs.length === 0) return;
 
   const FIELDS_PER_ROW = 7;

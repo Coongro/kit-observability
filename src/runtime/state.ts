@@ -1,4 +1,5 @@
 import type { SystemDatabase } from '@coongro/database-core';
+
 import type { ObservabilityConfig } from '../config.js';
 import type { DBSink } from '../sinks/db-sink.js';
 

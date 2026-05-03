@@ -1,4 +1,5 @@
 import type { Sql } from 'postgres';
+
 import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
 
 /**
@@ -25,9 +26,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE} (
 
 /** Devuelve la versión persistida o null si la tabla está vacía (primera install). */
 export async function readVersion(raw: Sql): Promise<number | null> {
-  const rows = await raw.unsafe<{ version: number }[]>(
-    `SELECT version FROM ${TABLE} WHERE id = 1`
-  );
+  const rows = await raw.unsafe<{ version: number }[]>(`SELECT version FROM ${TABLE} WHERE id = 1`);
   return rows[0]?.version ?? null;
 }
 

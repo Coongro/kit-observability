@@ -1,5 +1,6 @@
 import { PartitionManager } from '@coongro/database-core';
 import type { ScheduledTaskContext } from '@coongro/module-core/types/index.js';
+
 import { getRuntimeState } from '../runtime/state.js';
 
 /**

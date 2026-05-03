@@ -1,5 +1,6 @@
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
+
 import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
 
 /**

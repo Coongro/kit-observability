@@ -33,7 +33,9 @@ export class FileFailsafeWriter implements FailsafeWriter {
 
   constructor(dir: string, maxFileBytes: number, maxFiles: number) {
     if (maxFiles < 1) {
-      throw new Error(`[kit-observability] FileFailsafeWriter: maxFiles must be >= 1, got ${maxFiles}`);
+      throw new Error(
+        `[kit-observability] FileFailsafeWriter: maxFiles must be >= 1, got ${maxFiles}`
+      );
     }
     this.dir = dir;
     this.maxFileBytes = maxFileBytes;

@@ -1,4 +1,5 @@
 import { index, integer, jsonb, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+
 import { observabilitySchema } from './observability-schema.js';
 
 export const LOG_ENTRIES_TABLE = 'log_entries';

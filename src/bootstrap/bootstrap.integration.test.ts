@@ -1,15 +1,17 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Sql } from 'postgres';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
+import { LOG_ISSUES_TABLE } from '../schema/log-issues.js';
+import { LOG_SPANS_TABLE } from '../schema/log-spans.js';
+import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
 import {
   createTestSql,
   getTestDbUrl,
   resetObservabilitySchema,
   silentLogger,
 } from '../test-utils/db.js';
-import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
-import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
-import { LOG_SPANS_TABLE } from '../schema/log-spans.js';
-import { LOG_ISSUES_TABLE } from '../schema/log-issues.js';
+
 import { runBootstrap } from './run-bootstrap.js';
 import { SCHEMA_VERSION, SCHEMA_VERSION_TABLE, readVersion } from './schema-version.js';
 

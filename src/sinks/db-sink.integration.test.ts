@@ -1,19 +1,21 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { Sql } from 'postgres';
 import { LogLevel, type LogEntry } from '@coongro/core-logging';
+import type { Sql } from 'postgres';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { runBootstrap } from '../bootstrap/run-bootstrap.js';
+import { loadConfig } from '../config.js';
+import { registerPartitions } from '../partitions/register.js';
+import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
+import { LOG_ISSUES_TABLE } from '../schema/log-issues.js';
+import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
 import {
   createTestSql,
   getTestDbUrl,
   resetObservabilitySchema,
   silentLogger,
 } from '../test-utils/db.js';
-import { runBootstrap } from '../bootstrap/run-bootstrap.js';
-import { registerPartitions } from '../partitions/register.js';
-import { loadConfig } from '../config.js';
+
 import { DBSink } from './db-sink.js';
-import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
-import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
-import { LOG_ISSUES_TABLE } from '../schema/log-issues.js';
 
 const dbUrl = getTestDbUrl();
 const skipIfNoDb = dbUrl === null;
@@ -58,7 +60,11 @@ describe.skipIf(skipIfNoDb)('DBSink end-to-end (integration — Milestone 2 acce
     await registerPartitions(sql, baseConfig, silentLogger);
     sink = new DBSink(
       { raw: sql },
-      { batchSize: baseConfig.batchSize, batchIntervalMs: baseConfig.batchIntervalMs, failsafe: null }
+      {
+        batchSize: baseConfig.batchSize,
+        batchIntervalMs: baseConfig.batchIntervalMs,
+        failsafe: null,
+      }
     );
   });
 
@@ -111,9 +117,24 @@ describe.skipIf(skipIfNoDb)('DBSink end-to-end (integration — Milestone 2 acce
   });
 
   it('warns con mensajes que normalizan al mismo fingerprint colapsan al mismo issue', async () => {
-    sink.write(makeEntry({ level: LogLevel.WARN, message: 'tenant aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee not found' }));
-    sink.write(makeEntry({ level: LogLevel.WARN, message: 'tenant 11111111-2222-3333-4444-555555555555 not found' }));
-    sink.write(makeEntry({ level: LogLevel.WARN, message: 'tenant 99999999-8888-7777-6666-aaaaaaaaaaaa not found' }));
+    sink.write(
+      makeEntry({
+        level: LogLevel.WARN,
+        message: 'tenant aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee not found',
+      })
+    );
+    sink.write(
+      makeEntry({
+        level: LogLevel.WARN,
+        message: 'tenant 11111111-2222-3333-4444-555555555555 not found',
+      })
+    );
+    sink.write(
+      makeEntry({
+        level: LogLevel.WARN,
+        message: 'tenant 99999999-8888-7777-6666-aaaaaaaaaaaa not found',
+      })
+    );
     await sink.flushNow();
 
     const entries = await sql.unsafe<EntryRow[]>(`SELECT fingerprint FROM ${ENTRIES}`);

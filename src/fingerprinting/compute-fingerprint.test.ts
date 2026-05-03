@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { computeFingerprint } from './compute-fingerprint.js';
 
 describe('computeFingerprint', () => {
