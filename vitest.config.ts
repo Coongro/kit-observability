@@ -5,10 +5,13 @@ import { defineConfig } from 'vitest/config';
  * Tests integration (con DB) usan `vitest.integration.config.ts`.
  */
 export default defineConfig({
-  // Plugin es backend-only — sin CSS en src/. Desactivar CSS processing
-  // evita que Vitest intente cargar postcss.config.cjs (que requiere
-  // autoprefixer instalado y falla en CI donde solo están las deps mínimas).
-  css: false,
+  // Plugin es backend-only. Override explícito de postcss con plugins vacíos
+  // para que Vite NO intente cargar `postcss.config.cjs` (que requiere
+  // autoprefixer, no instalado en CI). `css: false` no alcanza porque Vite
+  // resuelve PostCSS antes de aplicar la flag de css.
+  css: {
+    postcss: { plugins: [] },
+  },
   test: {
     include: ['src/**/*.test.ts'],
     exclude: ['src/**/*.integration.test.ts', 'node_modules/**'],
