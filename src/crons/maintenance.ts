@@ -1,7 +1,24 @@
 import { PartitionManager } from '@coongro/database-core';
-import type { ScheduledTaskContext } from '@coongro/module-core/types/index.js';
 
 import { getRuntimeState } from '../runtime/state.js';
+
+/**
+ * Subset del `ScheduledTaskContext` de `@coongro/module-core` que necesita
+ * este handler. Inlineamos el tipo en vez de importarlo del subpath profundo
+ * (`@coongro/module-core/types/index.js`) porque ese path NO está exportado
+ * en `package.json` del package — funciona localmente via tsconfig paths
+ * pero falla cuando el package se resuelve desde npm/Verdaccio en CI.
+ *
+ * Cuando `@coongro/module-core` exponga `ScheduledTaskContext` en su barrel
+ * (`@coongro/module-core` directo), reemplazar este interface por un import.
+ */
+interface ScheduledTaskContext {
+  logger: {
+    info: (msg: string, meta?: Record<string, unknown>) => void;
+    warn?: (msg: string, meta?: Record<string, unknown>) => void;
+    error?: (msg: string, meta?: Record<string, unknown>) => void;
+  };
+}
 
 /**
  * Handler del scheduledTask `maintenance`. Corre `partman.run_maintenance_proc()`
