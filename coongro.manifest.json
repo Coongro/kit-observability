@@ -1,0 +1,17 @@
+{
+  "id": "kit-observability",
+  "version": "0.1.0",
+  "apiVersion": "2.0",
+  "runtime": "eager",
+  "assets": {
+    "styles": [
+      "./dist/assets/tailwind.css",
+      "./dist/assets/fontawesome/css/all.min.css"
+    ]
+  },
+  "contributes": {
+    "menus": [],
+    "views": [],
+    "repositories": []
+  }
+}
