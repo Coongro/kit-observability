@@ -247,12 +247,21 @@ describe.skipIf(skipIfNoDb)('runRetention (integration — COONG-145 acceptance)
     const config = mockState(sql, { OBSERVABILITY_RETENTION_DAYS_DEBUG: '5' });
     await registerPartitions(sql, config, silentLogger);
 
+    // Snapshot de IDs ANTES de runRetention. Mismo patrón que el test de spans
+    // (línea ~240) que filtra por span_id para aislarse de actividad concurrente:
+    // contra la dev DB local, una instancia activa de la API puede tener su
+    // DBSink escribiendo a log_entries en paralelo. Lo único que importa para
+    // este test es que `runRetention` no AGREGUE filas — un feedback loop
+    // hipotético produciría filas con IDs no presentes en este snapshot.
+    const beforeIds = new Set(
+      (await sql.unsafe<{ id: string }[]>(`SELECT id::text AS id FROM ${ENTRIES}`)).map((r) => r.id)
+    );
+
     await runRetention({ logger: silentLogger });
 
-    const rows = await sql.unsafe<{ count: string }[]>(
-      `SELECT COUNT(*)::text AS count FROM ${ENTRIES}`
-    );
-    expect(rows[0]?.count).toBe('0');
+    const after = await sql.unsafe<{ id: string }[]>(`SELECT id::text AS id FROM ${ENTRIES}`);
+    const newIds = after.filter((r) => !beforeIds.has(r.id));
+    expect(newIds).toHaveLength(0);
   });
 });
 

@@ -27,6 +27,56 @@
         "handler": "./dist/crons/retention.js",
         "export": "runRetention"
       }
+    ],
+    "httpEndpoints": [
+      {
+        "id": "traces-get",
+        "path": "/traces",
+        "method": "GET",
+        "handler": "./dist/endpoints/traces.js",
+        "export": "getTrace",
+        "auth": "jwt"
+      },
+      {
+        "id": "logs-query",
+        "path": "/logs/query",
+        "method": "GET",
+        "handler": "./dist/endpoints/logs-query.js",
+        "export": "queryLogsEndpoint",
+        "auth": "jwt"
+      },
+      {
+        "id": "logs-ingest",
+        "path": "/logs",
+        "method": "POST",
+        "handler": "./dist/endpoints/logs-ingest.js",
+        "export": "ingestLog",
+        "auth": "none"
+      },
+      {
+        "id": "issues-update",
+        "path": "/logs/issues",
+        "method": "PATCH",
+        "handler": "./dist/endpoints/issues-update.js",
+        "export": "updateIssue",
+        "auth": "jwt"
+      },
+      {
+        "id": "health-get",
+        "path": "/logs/health",
+        "method": "GET",
+        "handler": "./dist/endpoints/health.js",
+        "export": "getHealth",
+        "auth": "jwt"
+      },
+      {
+        "id": "audit-query",
+        "path": "/audit",
+        "method": "GET",
+        "handler": "./dist/endpoints/audit-query.js",
+        "export": "queryAuditEndpoint",
+        "auth": "jwt"
+      }
     ]
   }
 }

@@ -1,6 +1,8 @@
 import type { Sql } from 'postgres';
 
 import {
+  CREATE_AUDIT_EVENTS_INDEXES_SQL,
+  CREATE_AUDIT_EVENTS_SQL,
   CREATE_LOG_ENTRIES_INDEXES_SQL,
   CREATE_LOG_ENTRIES_SQL,
   CREATE_LOG_ISSUES_INDEXES_SQL,
@@ -65,6 +67,7 @@ export async function runBootstrap(raw: Sql, logger: BootstrapLogger): Promise<v
     logger.info(`first install — applying schema v${SCHEMA_VERSION}`);
     await raw.begin(async (tx) => {
       await applyV1(tx as unknown as Sql, logger);
+      await applyMigrations(tx as unknown as Sql, 1, logger);
       await writeVersion(tx as unknown as Sql, SCHEMA_VERSION);
     });
     logger.info(`schema v${SCHEMA_VERSION} applied (transactional)`);
@@ -77,10 +80,13 @@ export async function runBootstrap(raw: Sql, logger: BootstrapLogger): Promise<v
   }
 
   if (current < SCHEMA_VERSION) {
-    throw new Error(
-      `[kit-observability] schema_version ${current} < plugin SCHEMA_VERSION ${SCHEMA_VERSION}, ` +
-        `but no migrations are registered yet. Add a migration in bootstrap/migrations/ and bump SCHEMA_VERSION.`
-    );
+    logger.info(`schema at v${current}, migrating to v${SCHEMA_VERSION}`);
+    await raw.begin(async (tx) => {
+      await applyMigrations(tx as unknown as Sql, current, logger);
+      await writeVersion(tx as unknown as Sql, SCHEMA_VERSION);
+    });
+    logger.info(`schema migrated to v${SCHEMA_VERSION} (transactional)`);
+    return;
   }
 
   // current > SCHEMA_VERSION — plugin downgradeado.
@@ -91,6 +97,26 @@ export async function runBootstrap(raw: Sql, logger: BootstrapLogger): Promise<v
   logger.warn(
     `schema at v${current} but plugin expects v${SCHEMA_VERSION}; downgrade detected — skipping bootstrap. Subsequent INSERTs may fail if the higher-version schema is incompatible with this plugin version.`
   );
+}
+
+/**
+ * Aplica todas las migrations necesarias desde `from` hasta `SCHEMA_VERSION`,
+ * ejecutadas dentro de la transacción que el caller provee.
+ * Cada caso de migración es responsable de dejar el schema listo para el
+ * siguiente paso — el switch no tiene fallthrough intencional.
+ */
+async function applyMigrations(raw: Sql, from: number, logger: BootstrapLogger): Promise<void> {
+  if (from < 2) {
+    await migrateV1ToV2(raw, logger);
+  }
+}
+
+async function migrateV1ToV2(raw: Sql, logger: BootstrapLogger): Promise<void> {
+  await raw.unsafe(CREATE_AUDIT_EVENTS_SQL);
+  for (const stmt of CREATE_AUDIT_EVENTS_INDEXES_SQL) {
+    await raw.unsafe(stmt);
+  }
+  logger.info('migration v1→v2: table audit_events created');
 }
 
 async function applyV1(raw: Sql, logger: BootstrapLogger): Promise<void> {

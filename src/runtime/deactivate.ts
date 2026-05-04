@@ -27,6 +27,11 @@ const SINK_ID_PREFIX = '@coongro/kit-observability:';
 export async function deactivate(): Promise<void> {
   const state = getRuntimeStateOrNull();
   if (state !== null) {
+    // SpanSink: sacar del OTel provider ANTES de drainear para que no entren
+    // spans nuevos mientras la cola se vacía. shutdown() draina la cola.
+    state.removeSpanProcessor?.(state.spanSink);
+    await state.spanSink.shutdown();
+
     await state.dbSink.close();
   }
   removeSinksByPrefix(SINK_ID_PREFIX);

@@ -1,3 +1,4 @@
+import { AUDIT_EVENTS_TABLE } from '../schema/audit-events.js';
 import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
 import { LOG_ISSUES_TABLE } from '../schema/log-issues.js';
 import { LOG_SPANS_TABLE } from '../schema/log-spans.js';
@@ -95,4 +96,22 @@ export const CREATE_LOG_ISSUES_INDEXES_SQL = [
   `CREATE INDEX IF NOT EXISTS idx_log_issues_last_seen ON "${SCHEMA}"."${LOG_ISSUES_TABLE}" (last_seen_at)`,
   `CREATE INDEX IF NOT EXISTS idx_log_issues_tenant_last_seen ON "${SCHEMA}"."${LOG_ISSUES_TABLE}" (tenant_id, last_seen_at)`,
   `CREATE INDEX IF NOT EXISTS idx_log_issues_status_last_seen ON "${SCHEMA}"."${LOG_ISSUES_TABLE}" (status, last_seen_at)`,
+];
+
+export const CREATE_AUDIT_EVENTS_SQL = `
+CREATE TABLE IF NOT EXISTS "${SCHEMA}"."${AUDIT_EVENTS_TABLE}" (
+  id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  timestamp timestamptz NOT NULL DEFAULT now(),
+  tenant_id uuid,
+  actor_id uuid,
+  action text NOT NULL,
+  entity_type text,
+  entity_id text,
+  metadata jsonb
+)
+`.trim();
+
+export const CREATE_AUDIT_EVENTS_INDEXES_SQL = [
+  `CREATE INDEX IF NOT EXISTS idx_audit_events_ts ON "${SCHEMA}"."${AUDIT_EVENTS_TABLE}" (timestamp)`,
+  `CREATE INDEX IF NOT EXISTS idx_audit_events_tenant_ts ON "${SCHEMA}"."${AUDIT_EVENTS_TABLE}" (tenant_id, timestamp)`,
 ];
