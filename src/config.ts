@@ -33,8 +33,14 @@ export interface ObservabilityConfig {
   failsafeMaxFiles: number;
   /** Premake de pg_partman para log_entries y log_spans. */
   partitionPremake: number;
-  /** Retention en días para log_entries. `null` deshabilita drop automático. */
-  retentionDaysEntries: number | null;
+  /**
+   * Retention de log_entries por nivel (días). `null` deshabilita el drop.
+   * Se aplica vía DELETE rows (no partition drop) porque las particiones son
+   * por tiempo, no por nivel.
+   */
+  retentionDaysDebug: number | null;
+  retentionDaysWarn: number | null;
+  retentionDaysError: number | null;
   /** Retention en días para log_spans. `null` deshabilita drop automático. */
   retentionDaysSpans: number | null;
 }
@@ -63,9 +69,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ObservabilityC
       4,
       'OBSERVABILITY_PARTITION_PREMAKE'
     ),
-    retentionDaysEntries: optionalPositiveInt(
-      env.OBSERVABILITY_RETENTION_DAYS_ENTRIES,
-      'OBSERVABILITY_RETENTION_DAYS_ENTRIES'
+    retentionDaysDebug: optionalPositiveInt(
+      env.OBSERVABILITY_RETENTION_DAYS_DEBUG,
+      'OBSERVABILITY_RETENTION_DAYS_DEBUG'
+    ),
+    retentionDaysWarn: optionalPositiveInt(
+      env.OBSERVABILITY_RETENTION_DAYS_WARN,
+      'OBSERVABILITY_RETENTION_DAYS_WARN'
+    ),
+    retentionDaysError: optionalPositiveInt(
+      env.OBSERVABILITY_RETENTION_DAYS_ERROR,
+      'OBSERVABILITY_RETENTION_DAYS_ERROR'
     ),
     retentionDaysSpans: optionalPositiveInt(
       env.OBSERVABILITY_RETENTION_DAYS_SPANS,

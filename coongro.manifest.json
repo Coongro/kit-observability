@@ -20,6 +20,12 @@
         "cron": "0 * * * *",
         "handler": "./dist/crons/maintenance.js",
         "export": "runMaintenance"
+      },
+      {
+        "id": "retention",
+        "cron": "0 2 * * *",
+        "handler": "./dist/crons/retention.js",
+        "export": "runRetention"
       }
     ]
   }

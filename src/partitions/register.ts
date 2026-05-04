@@ -37,6 +37,18 @@ export async function registerPartitions(
   const manager = new PartitionManager(raw);
   await manager.initialize();
 
+  // log_entries tiene retention por nivel (DELETEs en el cron), no por partición.
+  // Para que pg_partman pueda dropear las partición tables vacías, usamos el
+  // mínimo de los tres thresholds: una partición más vieja que el más corto
+  // ya no puede tener filas de ningún nivel.
+  const entriesRetentionCandidates = [
+    config.retentionDaysDebug,
+    config.retentionDaysWarn,
+    config.retentionDaysError,
+  ].filter((v): v is number => v !== null);
+  const entriesPartitionRetention =
+    entriesRetentionCandidates.length > 0 ? Math.min(...entriesRetentionCandidates) : null;
+
   const partitioned: {
     tableName: string;
     partitionColumn: string;
@@ -45,7 +57,7 @@ export async function registerPartitions(
     {
       tableName: LOG_ENTRIES_TABLE,
       partitionColumn: 'timestamp',
-      retentionDays: config.retentionDaysEntries,
+      retentionDays: entriesPartitionRetention,
     },
     {
       tableName: LOG_SPANS_TABLE,
