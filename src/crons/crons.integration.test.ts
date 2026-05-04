@@ -83,6 +83,18 @@ function localDateKey(): string {
   ].join('');
 }
 
+/**
+ * Filtra particiones cuyo sufijo `pYYYYMMDD` sea estrictamente mayor a la
+ * fecha dada — equivale a "particiones que cubren un rango que arranca en
+ * el futuro".
+ */
+function partitionsAfter(names: string[], dateKey: string): string[] {
+  return names.filter((p) => {
+    const match = /p(\d{8})$/.exec(p);
+    return match?.[1] !== undefined && match[1] > dateKey;
+  });
+}
+
 // ─── retention cron ────────────────────────────────────────────────────────────
 
 describe.skipIf(skipIfNoDb)('runRetention (integration — COONG-145 acceptance)', () => {
@@ -223,9 +235,12 @@ describe.skipIf(skipIfNoDb)('runRetention (integration — COONG-145 acceptance)
 
     await runRetention({ logger: silentLogger });
 
-    const rows = await sql.unsafe<{ span_id: string }[]>(`SELECT span_id FROM ${SPANS}`);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.span_id).toBe('new-span');
+    // Filtrar por span_id del test para aislar de spans que el API pueda
+    // insertar concurrentemente en la misma dev DB durante la ejecución del test.
+    const oldSpan = await sql.unsafe(`SELECT 1 FROM ${SPANS} WHERE span_id = 'old-span'`);
+    expect(oldSpan).toHaveLength(0);
+    const newSpan = await sql.unsafe(`SELECT 1 FROM ${SPANS} WHERE span_id = 'new-span'`);
+    expect(newSpan).toHaveLength(1);
   });
 
   it('no escribe filas en log_entries como efecto secundario (no feedback loop)', async () => {
@@ -267,11 +282,7 @@ describe.skipIf(skipIfNoDb)('runMaintenance (integration — COONG-145 acceptanc
     await runMaintenance({ logger: silentLogger });
 
     const after = await listChildPartitions(sql, S, LOG_ENTRIES_TABLE);
-    const today = localDateKey();
-    const future = after.filter((p) => {
-      const m = p.match(/p(\d{8})$/);
-      return m !== undefined && m[1] !== undefined && m[1] > today;
-    });
+    const future = partitionsAfter(after, localDateKey());
     expect(future.length).toBeGreaterThanOrEqual(7);
   });
 
@@ -282,11 +293,7 @@ describe.skipIf(skipIfNoDb)('runMaintenance (integration — COONG-145 acceptanc
     await runMaintenance({ logger: silentLogger });
 
     const after = await listChildPartitions(sql, S, LOG_SPANS_TABLE);
-    const today = localDateKey();
-    const future = after.filter((p) => {
-      const m = p.match(/p(\d{8})$/);
-      return m !== undefined && m[1] !== undefined && m[1] > today;
-    });
+    const future = partitionsAfter(after, localDateKey());
     expect(future.length).toBeGreaterThanOrEqual(7);
   });
 

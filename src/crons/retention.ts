@@ -1,3 +1,5 @@
+import type { Sql } from 'postgres';
+
 import { getRuntimeState } from '../runtime/state.js';
 import { LOG_ENTRIES_TABLE, LOG_SPANS_TABLE, OBSERVABILITY_SCHEMA_NAME } from '../schema/index.js';
 
@@ -15,6 +17,33 @@ interface ScheduledTaskContext {
 
 const ENTRIES = `"${OBSERVABILITY_SCHEMA_NAME}"."${LOG_ENTRIES_TABLE}"`;
 const SPANS = `"${OBSERVABILITY_SCHEMA_NAME}"."${LOG_SPANS_TABLE}"`;
+
+/**
+ * Corre un DELETE con ventana de retención y devuelve el conteo de filas
+ * borradas. `table` y `whereClause` se interpolán en el SQL — ambos deben
+ * ser literales del archivo (no input externo) para evitar SQL injection.
+ *
+ * Usa result.count (command tag de pg) en lugar de RETURNING 1 para no
+ * materializar potencialmente millones de filas en memoria del lado Node.
+ *
+ * El parámetro `$1` recibe los días como string y se cast a interval —
+ * postgres.js no soporta passing un Interval nativo, así que el cast en SQL
+ * es la forma idiomática.
+ *
+ * FIXME(COONG-153): agregar batching con LIMIT para acotar la transacción.
+ * En la primera ejecución tras habilitar retention con historial acumulado,
+ * este DELETE puede borrar millones de filas en una sola transacción → lock
+ * prolongado en partitions y replication lag. Patrón: loop + LIMIT 10000.
+ */
+async function deleteOlderThan(
+  raw: Sql,
+  table: string,
+  whereClause: string,
+  days: number
+): Promise<number> {
+  const result = await raw.unsafe(`DELETE FROM ${table} WHERE ${whereClause}`, [String(days)]);
+  return result.count;
+}
 
 /**
  * Handler del scheduledTask `retention`. Corre a las 2am para borrar filas
@@ -36,39 +65,43 @@ const SPANS = `"${OBSERVABILITY_SCHEMA_NAME}"."${LOG_SPANS_TABLE}"`;
 export async function runRetention({ logger }: ScheduledTaskContext): Promise<void> {
   const { systemDb, config } = getRuntimeState();
   const { raw } = systemDb;
-
+  const ageWindow = "timestamp < NOW() - ($1 || ' days')::interval";
   const deleted: Record<string, number> = {};
 
   if (config.retentionDaysDebug !== null) {
-    const rows = await raw.unsafe<{ count: string }[]>(
-      `DELETE FROM ${ENTRIES} WHERE level <= 20 AND timestamp < NOW() - ($1 || ' days')::interval RETURNING 1`,
-      [String(config.retentionDaysDebug)]
+    deleted['entries.debug'] = await deleteOlderThan(
+      raw,
+      ENTRIES,
+      `level <= 20 AND ${ageWindow}`,
+      config.retentionDaysDebug
     );
-    deleted['entries.debug'] = rows.length;
   }
 
   if (config.retentionDaysWarn !== null) {
-    const rows = await raw.unsafe<{ count: string }[]>(
-      `DELETE FROM ${ENTRIES} WHERE level = 30 AND timestamp < NOW() - ($1 || ' days')::interval RETURNING 1`,
-      [String(config.retentionDaysWarn)]
+    deleted['entries.warn'] = await deleteOlderThan(
+      raw,
+      ENTRIES,
+      `level = 30 AND ${ageWindow}`,
+      config.retentionDaysWarn
     );
-    deleted['entries.warn'] = rows.length;
   }
 
   if (config.retentionDaysError !== null) {
-    const rows = await raw.unsafe<{ count: string }[]>(
-      `DELETE FROM ${ENTRIES} WHERE level >= 40 AND timestamp < NOW() - ($1 || ' days')::interval RETURNING 1`,
-      [String(config.retentionDaysError)]
+    deleted['entries.error'] = await deleteOlderThan(
+      raw,
+      ENTRIES,
+      `level >= 40 AND ${ageWindow}`,
+      config.retentionDaysError
     );
-    deleted['entries.error'] = rows.length;
   }
 
   if (config.retentionDaysSpans !== null) {
-    const rows = await raw.unsafe<{ count: string }[]>(
-      `DELETE FROM ${SPANS} WHERE start_time < NOW() - ($1 || ' days')::interval RETURNING 1`,
-      [String(config.retentionDaysSpans)]
+    deleted['spans'] = await deleteOlderThan(
+      raw,
+      SPANS,
+      "start_time < NOW() - ($1 || ' days')::interval",
+      config.retentionDaysSpans
     );
-    deleted['spans'] = rows.length;
   }
 
   logger.info('retention completed', { deleted });
