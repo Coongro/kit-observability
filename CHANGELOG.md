@@ -1,5 +1,11 @@
 # @coongro/kit-observability
 
+## 0.3.0
+
+### Minor Changes
+
+- 8a59993: Add retention cron that deletes old log entries by level bucket (debug/info, warn, error/fatal) and old spans, with per-level configurable thresholds via env vars.
+
 ## 0.2.0
 
 ### Minor Changes
