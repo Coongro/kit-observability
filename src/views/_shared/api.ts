@@ -10,6 +10,7 @@ import type {
   WireIngestLogResponse,
   WireIssueDetail,
   WireIssueStatus,
+  WireListSourcesResult,
   WireListTenantsResult,
   WirePluginHealth,
   WireQueryAuditResult,
@@ -35,6 +36,7 @@ export type {
   WireSampleLogEntry as SampleLogEntry,
   WireSimilarEvent as SimilarEvent,
   WireSinkHealth as SinkHealth,
+  WireSourceOption as SourceOption,
   WireSpanRecord as SpanRecord,
   WireTenantOption as TenantOption,
   WireTraceQueryResult as TraceQueryResult,
@@ -314,6 +316,16 @@ export function listTenants(
   options: { signal?: AbortSignal } = {}
 ): Promise<WireListTenantsResult> {
   return request<WireListTenantsResult>('/tenants', { signal: options.signal });
+}
+
+// =============================================================================
+// 6b) GET /sources — sources distintos para el dropdown de filtro
+// =============================================================================
+
+export function listSources(
+  options: { signal?: AbortSignal } = {}
+): Promise<WireListSourcesResult> {
+  return request<WireListSourcesResult>('/sources', { signal: options.signal });
 }
 
 // =============================================================================

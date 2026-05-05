@@ -3,6 +3,7 @@ import { getHostReact } from '@coongro/plugin-sdk';
 import { ObsIcon } from '../_shared/components/icons.js';
 import { MultiSelectChip } from '../_shared/components/multi-select-chip.js';
 import { SingleSelectChip } from '../_shared/components/single-select-chip.js';
+import { SourceFilterChip } from '../_shared/components/source-filter-chip.js';
 import { TenantFilterChip } from '../_shared/components/tenant-filter-chip.js';
 import { TextInputChip } from '../_shared/components/text-input-chip.js';
 import { LEVEL, LEVEL_LABEL, type LevelValue } from '../_shared/lib/levels.js';
@@ -89,11 +90,9 @@ export function StreamFilterBar({ filters, setFilters }: StreamFilterBarProps) {
       labelOf: (v) => LEVEL_LABEL[v as LevelValue],
       onChange: (next) => setLevels(next as LevelValue[]),
     }),
-    h(TextInputChip, {
-      label: 'SOURCE',
+    h(SourceFilterChip, {
       value: filters.source,
-      placeholder: 'plugin:billing-afip',
-      onChange: setSource,
+      setValue: setSource,
     }),
     h(SingleSelectChip, {
       label: 'RANGE',

@@ -192,6 +192,23 @@ export interface WireListTenantsResult {
 }
 
 // =============================================================================
+// /sources — sources distintos vistos en log_entries (últimos 14 días)
+// =============================================================================
+
+export interface WireSourceOption {
+  /** El string exacto que aparece en `log_entries.source`. */
+  source: string;
+  /** Cuántos logs emitieron desde ese source en la ventana. */
+  count: number;
+  /** Último timestamp en que ese source emitió un log (ISO string). */
+  last_seen: string;
+}
+
+export interface WireListSourcesResult {
+  rows: WireSourceOption[];
+}
+
+// =============================================================================
 // /traces — spans de un trace para el waterfall
 // =============================================================================
 

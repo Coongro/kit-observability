@@ -157,6 +157,14 @@
         "handler": "./dist/endpoints/tenants-list.js",
         "export": "listTenantsEndpoint",
         "auth": "jwt"
+      },
+      {
+        "id": "sources-list",
+        "path": "/sources",
+        "method": "GET",
+        "handler": "./dist/endpoints/sources-list.js",
+        "export": "listSourcesEndpoint",
+        "auth": "jwt"
       }
     ]
   }
