@@ -1,7 +1,9 @@
 import type { SystemDatabase } from '@coongro/database-core';
 
+import type { AuditLog } from '../audit/index.js';
 import type { ObservabilityConfig } from '../config.js';
 import type { DBSink } from '../sinks/db-sink.js';
+import type { SpanSink } from '../sinks/span-sink.js';
 
 /**
  * Estado runtime del plugin compartido entre `activate()`, `deactivate()` y los
@@ -18,6 +20,14 @@ interface RuntimeState {
   systemDb: SystemDatabase;
   config: ObservabilityConfig;
   dbSink: DBSink;
+  spanSink: SpanSink;
+  auditLog: AuditLog;
+  /**
+   * Función removeSpanProcessor del API, guardada en activate() para poder
+   * llamarla desde deactivate() (que no recibe el contexto original).
+   * Undefined si el API host no expone OTel (OTEL_DISABLED=1 u otro runtime).
+   */
+  removeSpanProcessor: ((processor: SpanSink) => boolean) | undefined;
 }
 
 let current: RuntimeState | null = null;

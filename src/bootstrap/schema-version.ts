@@ -10,7 +10,7 @@ import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
  * TABLE IF NOT EXISTS" suelto sin orden ni reentry safety. Implementado de
  * arranque para que la deuda no exista.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const SCHEMA_VERSION_TABLE = 'schema_version';
 

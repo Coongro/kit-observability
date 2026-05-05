@@ -57,6 +57,7 @@
     "@coongro/core-logging": ">=0.41.0",
     "@coongro/database-core": ">=0.41.0",
     "@coongro/module-core": ">=0.41.0",
+    "@opentelemetry/sdk-trace-base": "^2.7.1",
     "@types/node": "^20.11.5",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
