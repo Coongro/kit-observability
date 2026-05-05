@@ -100,15 +100,22 @@ async function request<T>(path: string, options: FetchOptions = {}): Promise<T> 
 
   const res = await fetch(url, init);
   const text = await res.text();
-  // Si la respuesta es vacía (204) devolvemos undefined; para todo lo demás,
-  // intentamos parsear JSON pero toleramos texto plano (errores del proxy
-  // a veces vienen sin content-type application/json).
+  // Si la respuesta es vacía (204) devolvemos undefined; para todo lo demás
+  // intentamos parsear JSON. Distinguimos dos casos del fallo de parse:
+  //   - res.ok=false (error response): toleramos texto plano porque proxies
+  //     intermedios devuelven HTML/text sin content-type JSON.
+  //   - res.ok=true (success response): parse fallido es contrato roto del
+  //     servidor — antes el código casteaba el string como T y los callers
+  //     crasheaban downstream con un error confuso. Ahora tiramos ApiError
+  //     status 502 (Bad Gateway-ish) para que falle ruidoso en el caller.
   let payload: unknown = undefined;
+  let parseFailed = false;
   if (text.length > 0) {
     try {
       payload = JSON.parse(text);
     } catch {
       payload = text;
+      parseFailed = true;
     }
   }
 
@@ -120,6 +127,10 @@ async function request<T>(path: string, options: FetchOptions = {}): Promise<T> 
           ? payload
           : res.statusText;
     throw new ApiError(res.status, message, path, payload);
+  }
+
+  if (parseFailed) {
+    throw new ApiError(502, 'invalid JSON response from server', path, payload);
   }
 
   return payload as T;

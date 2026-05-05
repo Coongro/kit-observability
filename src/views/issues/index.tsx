@@ -1,15 +1,14 @@
 // Vista principal de Issues — listado de errores agrupados por fingerprint
 // con filtros, acciones y panel de detalle.
 //
-// Decisiones del port (ver COONG-118):
-//   - 1:1 visualmente con el prototype (Observabilidad/IssuesView.jsx).
-//   - Sin atajos de teclado (j/k/g+letra/Ctrl+K) — el spec los elimina.
-//   - Status del backend son 3: open, resolved, muted. Acciones limitadas a
-//     resolver/silenciar/reabrir; no hay snooze (no existe en el schema).
-//   - Filtros: tenant, level, source, status, range. No hay category ni
-//     assignee (no existen en el backend).
+// Decisiones del port:
+//   - El backend solo expone status open/resolved/muted, así que NO hay
+//     snooze (el prototype lo tenía como mock). El bug "swallow on resolve"
+//     que se descubrió en code review se mitiga acá: cualquier fallo de
+//     `patchIssueStatus` se levanta a un toast del host (no se loggea
+//     silencioso a console.error).
 
-import { getHostReact } from '@coongro/plugin-sdk';
+import { getHostReact, usePlugin } from '@coongro/plugin-sdk';
 
 import {
   queryIssues,
@@ -20,6 +19,7 @@ import {
 import { ObsIcon } from '../_shared/components/icons.js';
 import { PageHeader } from '../_shared/components/page-header.js';
 import { ResultsBar } from '../_shared/components/results-bar.js';
+import { copyToClipboard } from '../_shared/lib/clipboard.js';
 import { formatError, useFetch } from '../_shared/use-fetch.js';
 
 import { DEFAULT_FILTERS, IssuesFilterBar, type IssuesFilters } from './filter-bar.js';
@@ -40,7 +40,14 @@ const RANGE_TO_FROM: Record<IssuesFilters['range'], () => string | undefined> = 
   all: () => undefined,
 };
 
+const STATUS_LABEL: Record<IssueStatus, string> = {
+  open: 'reabrir',
+  resolved: 'resolver',
+  muted: 'silenciar',
+};
+
 export function IssuesView() {
+  const { toast } = usePlugin();
   const [filters, setFilters] = useState<IssuesFilters>(DEFAULT_FILTERS);
   const [selected, setSelected] = useState<string | null>(null);
   const [fullPage, setFullPage] = useState(false);
@@ -79,12 +86,29 @@ export function IssuesView() {
         await patchIssueStatus(id, status);
         await refetch();
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('[kit-observability] failed to update issue status', err);
+        // El catch antes hacía solo `console.error` — si el backend devolvía
+        // 403/500/timeout el botón parecía exitoso (no rollback, no mensaje)
+        // y el operador no se enteraba. Ahora levantamos un toast del host
+        // con el mensaje real para que falle ruidoso.
+        const message = err instanceof Error ? err.message : 'error desconocido';
+        toast.error(`No se pudo ${STATUS_LABEL[status]} el issue`, message);
       }
     },
-    [refetch]
+    [refetch, toast]
   );
+
+  const onCopyPermalink = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    const ok = await copyToClipboard(window.location.href);
+    if (ok) {
+      toast.success('Permalink copiado', '');
+    } else {
+      toast.error(
+        'No se pudo copiar al portapapeles',
+        'El navegador rechazó el clipboard. Probá copiar la URL manualmente.'
+      );
+    }
+  }, [toast]);
 
   const selectedIssue = selected ? issues.find((i) => i.fingerprint === selected) : null;
 
@@ -136,7 +160,11 @@ export function IssuesView() {
           ),
           h(
             'button',
-            { key: 'permalink', className: 'btn btn-secondary btn-sm', onClick: copyPermalink },
+            {
+              key: 'permalink',
+              className: 'btn btn-secondary btn-sm',
+              onClick: () => void onCopyPermalink(),
+            },
             h(ObsIcon, { name: 'link', size: 13 }),
             h('span', null, 'Permalink')
           ),
@@ -346,9 +374,4 @@ function InlineError({ error, onRetry }: { error: Error; onRetry: () => void }) 
 
 function isoAgo(ms: number): string {
   return new Date(Date.now() - ms).toISOString();
-}
-
-function copyPermalink() {
-  if (typeof window === 'undefined') return;
-  void navigator.clipboard?.writeText(window.location.href);
 }

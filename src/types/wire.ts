@@ -10,6 +10,18 @@
 // Convención: si un campo nuevo se agrega al backend pero NO debe cruzar la
 // frontera HTTP (ej: timestamps internos, IDs sensibles), no se agrega acá
 // y el handler debe sanitizar antes de devolver.
+//
+// CASING DRIFT (intencional):
+//   - La mayoría de los wire types usan `snake_case` porque vienen de raw
+//     SQL (`raw.unsafe<>(...)`) que devuelve los nombres de columna tal
+//     cual: `tenant_id`, `request_id`, `sample_message`, etc.
+//   - `WireAuditEvent` usa `camelCase` (`tenantId`, `actorId`, `entityType`)
+//     porque su query usa Drizzle ORM que aplica el mapping `tenant_id` →
+//     `tenantId` automáticamente. NO se normalizó al resto para evitar un
+//     transform manual extra en el endpoint y porque el endpoint de audit
+//     es legacy (predates el resto de los endpoints).
+//   - Si en algún momento se normaliza todo a snake_case, hay que revisar
+//     `endpoints/audit-query.ts` y `views/audit/` simultáneamente.
 
 // =============================================================================
 // /logs/query — listado de log_entries

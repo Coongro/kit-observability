@@ -24,6 +24,15 @@ const BUCKET_MS: Record<BucketGranularity, number> = {
   day: 24 * 60 * 60 * 1000,
 };
 
+// Allowlist runtime para defender contra SQL injection si en el futuro la
+// granularidad llegara desde un query param (hoy todos los callers la
+// hardcodean, pero un endpoint nuevo puede forwardearla sin notar). El
+// valor se interpola directo en el SQL (`date_trunc('${granularity}', ...)`)
+// — TypeScript no protege en runtime.
+const VALID_GRANULARITIES: ReadonlySet<BucketGranularity> = new Set(
+  Object.keys(BUCKET_MS) as BucketGranularity[]
+);
+
 export interface BucketCountInput {
   /** Lista de fingerprints a buscar. Vacía → resultado vacío sin tocar DB. */
   fingerprints: string[];
@@ -49,6 +58,16 @@ export async function bucketCountByFingerprint(
   raw: Sql,
   input: BucketCountInput
 ): Promise<Map<string, number[]>> {
+  // Validación runtime de los dos campos que se interpolan en SQL. TypeScript
+  // los garantiza solo si el caller respeta los tipos; cualquier valor que
+  // llegue de un query param o JSON necesita esta puerta.
+  if (!VALID_GRANULARITIES.has(input.granularity)) {
+    throw new Error(`Invalid granularity: ${String(input.granularity)}`);
+  }
+  if (!Number.isInteger(input.bucketCount) || input.bucketCount <= 0) {
+    throw new Error(`bucketCount must be a positive integer, got ${String(input.bucketCount)}`);
+  }
+
   const result = new Map<string, number[]>();
   if (input.fingerprints.length === 0) return result;
 

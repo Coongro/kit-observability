@@ -31,9 +31,16 @@ export interface BuildResult {
   nextIdx: number;
 }
 
+/**
+ * Tipos PG soportados por los casts del builder. Lista cerrada: si necesitás
+ * uno nuevo, agregalo acá explícitamente — un string libre habilitaría typos
+ * silenciosos que solo aparecen como errores de PG en runtime.
+ */
+export type SqlCast = 'uuid' | 'timestamptz' | 'timestamp' | 'jsonb' | 'bigint' | 'int';
+
 interface CastOptions {
-  /** Cast PG a aplicar al placeholder (ej: `uuid`, `timestamptz`). */
-  cast?: string;
+  /** Cast PG a aplicar al placeholder. */
+  cast?: SqlCast;
 }
 
 export class WhereBuilder {

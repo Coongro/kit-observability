@@ -1,5 +1,10 @@
 import { getHostReact } from '@coongro/plugin-sdk';
 
+import {
+  parseStackFromError as parseStackFromErrorImpl,
+  type StackFrameData,
+} from '../lib/parse-stack.js';
+
 import { CopyBtn } from './copy-btn.js';
 import { ObsIcon } from './icons.js';
 
@@ -7,16 +12,11 @@ const React = getHostReact();
 const h = React.createElement;
 const { useState } = React;
 
-export interface StackFrameData {
-  /** Nombre de la función. */
-  fn: string;
-  /** Path del archivo, idealmente relativo al repo. */
-  file: string;
-  line: number;
-  col: number;
-  /** False para frames de node_modules / Node internals — se renderean colapsables. */
-  app: boolean;
-}
+// Re-exports para preservar el API previo (callers importan
+// `parseStackFromError` y `StackFrameData` desde acá). Los tests apuntan
+// directo a `./stack-frame-parser.js` para evitar bajar React.
+export type { StackFrameData };
+export const parseStackFromError = parseStackFromErrorImpl;
 
 export interface StackFrameProps {
   frame: StackFrameData;
@@ -124,57 +124,5 @@ export function StackFrame({ frame, first = false }: StackFrameProps) {
         h(CopyBtn, { value: `${frame.file}:${frame.line}`, label: 'copiar path' })
       )
     )
-  );
-}
-
-/**
- * Parsea un campo `error` de un LogEntry (objeto JSON freeform) intentando
- * extraer un stack array compatible con `StackFrameData[]`. Si el formato
- * no matchea, devuelve null para que el caller pueda renderear un mensaje
- * genérico en lugar de fallar.
- *
- * Soporta:
- *   - `error.stack` como string (formato V8: `at fn (file:line:col)`).
- *   - `error.frames` ya parseado como `StackFrameData[]`.
- */
-export function parseStackFromError(error: unknown): StackFrameData[] | null {
-  if (!error || typeof error !== 'object') return null;
-  const e = error as { stack?: unknown; frames?: unknown };
-
-  if (Array.isArray(e.frames)) {
-    return e.frames.filter(isStackFrameData);
-  }
-
-  if (typeof e.stack !== 'string') return null;
-
-  const lines = e.stack.split('\n').slice(1);
-  const frames: StackFrameData[] = [];
-  for (const raw of lines) {
-    const m = /at\s+(.+?)\s+\((.+?):(\d+):(\d+)\)/.exec(raw) ?? /at\s+(.+?):(\d+):(\d+)/.exec(raw);
-    if (!m) continue;
-    const fn = m[1];
-    const file = m.length === 5 ? m[2] : '<anonymous>';
-    const line = parseInt(m[m.length - 2], 10);
-    const col = parseInt(m[m.length - 1], 10);
-    frames.push({
-      fn,
-      file,
-      line,
-      col,
-      app: !file.includes('node_modules') && !file.startsWith('node:'),
-    });
-  }
-  return frames.length > 0 ? frames : null;
-}
-
-function isStackFrameData(v: unknown): v is StackFrameData {
-  if (!v || typeof v !== 'object') return false;
-  const f = v as Record<string, unknown>;
-  return (
-    typeof f.fn === 'string' &&
-    typeof f.file === 'string' &&
-    typeof f.line === 'number' &&
-    typeof f.col === 'number' &&
-    typeof f.app === 'boolean'
   );
 }

@@ -1,5 +1,7 @@
 import { getHostReact } from '@coongro/plugin-sdk';
 
+import { copyToClipboard } from '../lib/clipboard.js';
+
 import { ObsIcon } from './icons.js';
 
 const React = getHostReact();
@@ -65,53 +67,4 @@ export function CopyBtn({ value, label = 'copiar', size = 12 }: CopyBtnProps) {
     },
     h(ObsIcon, { name: done ? 'check' : 'copy', size })
   );
-}
-
-/**
- * Copia al portapapeles devolviendo `true`/`false` según éxito real.
- *
- * Estrategia:
- *   1. Async Clipboard API si está disponible y tenemos focus (requiere
- *      origen secure: HTTPS o localhost — falla en `http://app.algo.local`).
- *   2. Fallback `document.execCommand('copy')` con un textarea temporal.
- *      Funciona en orígenes no-secure y en navegadores viejos.
- *
- * El feedback visual del botón depende del retorno: si NINGUNA estrategia
- * funcionó, no mostramos ✓ engañoso.
- */
-async function copyToClipboard(text: string): Promise<boolean> {
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      // Cae al fallback — algunos navegadores tiran NotAllowedError en
-      // orígenes inseguros o cuando el documento perdió foco.
-    }
-  }
-  return execCommandFallback(text);
-}
-
-function execCommandFallback(text: string): boolean {
-  if (typeof document === 'undefined') return false;
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  // `readonly` + estilos off-screen para que el textarea no robe foco
-  // visible ni dispare scroll en mobile.
-  ta.setAttribute('readonly', '');
-  ta.style.position = 'fixed';
-  ta.style.top = '0';
-  ta.style.left = '0';
-  ta.style.opacity = '0';
-  ta.style.pointerEvents = 'none';
-  document.body.appendChild(ta);
-  ta.select();
-  let ok = false;
-  try {
-    ok = document.execCommand('copy');
-  } catch {
-    ok = false;
-  }
-  document.body.removeChild(ta);
-  return ok;
 }
