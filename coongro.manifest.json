@@ -6,13 +6,70 @@
   "entry": "./dist/server.js",
   "assets": {
     "styles": [
-      "./dist/assets/tailwind.css",
-      "./dist/assets/fontawesome/css/all.min.css"
+      "./dist/assets/observability.css"
     ]
   },
   "contributes": {
-    "menus": [],
-    "views": [],
+    "menus": [
+      {
+        "path": "Issues",
+        "order": 90,
+        "icon": "assets/icons/issues.svg",
+        "color": "#DD4F34",
+        "viewId": "kit-observability.issues.open"
+      },
+      {
+        "path": "Stream",
+        "order": 91,
+        "icon": "assets/icons/stream.svg",
+        "color": "#3D7A64",
+        "viewId": "kit-observability.stream.open"
+      },
+      {
+        "path": "Auditoría",
+        "order": 92,
+        "icon": "assets/icons/audit.svg",
+        "color": "#1F1F1F",
+        "viewId": "kit-observability.auditoria.open"
+      },
+      {
+        "path": "Salud",
+        "order": 93,
+        "icon": "assets/icons/health.svg",
+        "color": "#C08527",
+        "viewId": "kit-observability.salud.open"
+      }
+    ],
+    "views": [
+      {
+        "id": "kit-observability.issues.open",
+        "title": "Issues",
+        "component": "./dist/views/issues/index.js",
+        "export": "IssuesView",
+        "layout": "full"
+      },
+      {
+        "id": "kit-observability.stream.open",
+        "title": "Stream",
+        "component": "./dist/views/stream/index.js",
+        "export": "StreamView",
+        "layout": "full"
+      },
+      {
+        "id": "kit-observability.auditoria.open",
+        "title": "Auditoría",
+        "component": "./dist/views/audit/index.js",
+        "export": "AuditView",
+        "layout": "full"
+      },
+      {
+        "id": "kit-observability.salud.open",
+        "title": "Salud",
+        "component": "./dist/views/health/index.js",
+        "export": "HealthView",
+        "layout": "full"
+      }
+    ],
     "repositories": [],
     "scheduledTasks": [
       {
@@ -54,6 +111,22 @@
         "auth": "none"
       },
       {
+        "id": "issues-query",
+        "path": "/logs/issues",
+        "method": "GET",
+        "handler": "./dist/endpoints/issues-query.js",
+        "export": "queryIssuesEndpoint",
+        "auth": "jwt"
+      },
+      {
+        "id": "issues-detail",
+        "path": "/logs/issues/detail",
+        "method": "GET",
+        "handler": "./dist/endpoints/issues-detail.js",
+        "export": "getIssueDetailEndpoint",
+        "auth": "jwt"
+      },
+      {
         "id": "issues-update",
         "path": "/logs/issues",
         "method": "PATCH",
@@ -75,6 +148,14 @@
         "method": "GET",
         "handler": "./dist/endpoints/audit-query.js",
         "export": "queryAuditEndpoint",
+        "auth": "jwt"
+      },
+      {
+        "id": "tenants-list",
+        "path": "/tenants",
+        "method": "GET",
+        "handler": "./dist/endpoints/tenants-list.js",
+        "export": "listTenantsEndpoint",
         "auth": "jwt"
       }
     ]

@@ -1,0 +1,212 @@
+// Wire types — la forma JSON exacta que el plugin emite vía HTTP, después
+// de que Express serializa los tipos del backend (Date → string ISO,
+// bigint → string para evitar pérdida de precisión).
+//
+// Tanto los views (frontend) como los handlers de los endpoints (backend)
+// importan estos tipos para que el contrato HTTP esté declarado en un solo
+// lugar. Cualquier cambio acá fuerza ajustes en ambos lados → drift visible
+// en lugar de silencioso.
+//
+// Convención: si un campo nuevo se agrega al backend pero NO debe cruzar la
+// frontera HTTP (ej: timestamps internos, IDs sensibles), no se agrega acá
+// y el handler debe sanitizar antes de devolver.
+
+// =============================================================================
+// /logs/query — listado de log_entries
+// =============================================================================
+
+export interface WireLogEntry {
+  id: string;
+  timestamp: string;
+  tenant_id: string | null;
+  request_id: string | null;
+  level: number;
+  source: string;
+  message: string;
+  context: unknown;
+  metadata: unknown;
+  error: unknown;
+  fingerprint: string | null;
+}
+
+export interface WireQueryLogsResult {
+  entries: WireLogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+// =============================================================================
+// /logs (POST) — ingestion de errores del frontend
+// =============================================================================
+
+export interface WireIngestLogResponse {
+  queued: boolean;
+}
+
+// =============================================================================
+// /logs/issues (PATCH) — actualizar status de un issue
+// =============================================================================
+
+export type WireIssueStatus = 'open' | 'resolved' | 'muted';
+
+export interface WireUpdateIssueResponse {
+  updated: true;
+}
+
+// =============================================================================
+// /logs/health — métricas de los sinks
+// =============================================================================
+
+export interface WireSinkHealth {
+  queueLag: number;
+  insertFailures: number;
+  lastFlushAt: string | null;
+  divertedToFailsafe: number;
+  permanentlyLost: number;
+  failsafeWriteErrors: number;
+}
+
+export interface WirePluginHealth {
+  dbSink: WireSinkHealth;
+  spanSink: WireSinkHealth;
+}
+
+// =============================================================================
+// /logs/issues (GET) — listado de issues agrupados por fingerprint
+// =============================================================================
+
+export type WireIssueLevel = number;
+
+export interface WireLogIssue {
+  id: string;
+  fingerprint: string;
+  tenant_id: string | null;
+  level: WireIssueLevel;
+  source: string;
+  sample_message: string;
+  sample_top_frame: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  /** int8 serializado como string por el driver postgres. */
+  occurrence_count: string;
+  status: WireIssueStatus;
+  /** Tenants distintos que tuvieron este issue (de log_entries). */
+  affected_tenants_count: number;
+  /** Sparkline de las últimas 24 horas, exactamente 24 buckets, oldest first. */
+  sparkline_24h: number[];
+}
+
+export interface WireQueryIssuesResult {
+  rows: WireLogIssue[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+// =============================================================================
+// /logs/issues/detail (GET) — detalle de un issue por fingerprint
+// =============================================================================
+
+export interface WireSampleLogEntry {
+  id: string;
+  timestamp: string;
+  tenant_id: string | null;
+  request_id: string | null;
+  level: number;
+  source: string;
+  message: string;
+  context: unknown;
+  metadata: unknown;
+  error: unknown;
+}
+
+export interface WireAffectedTenant {
+  tenant_id: string;
+  count: number;
+  last_seen: string;
+}
+
+export interface WireSimilarEvent {
+  id: string;
+  timestamp: string;
+  tenant_id: string | null;
+  request_id: string | null;
+  level: number;
+  message: string;
+}
+
+export interface WireIssueDetail {
+  /** null si el fingerprint no existe en log_issues. */
+  issue: WireLogIssue | null;
+  /** Último log_entry para el fingerprint, fuente del stack trace + meta JSON. */
+  sample: WireSampleLogEntry | null;
+  /** Tenants distintos con count y último timestamp, ordenados por last_seen DESC. */
+  affectedTenants: WireAffectedTenant[];
+  /** Últimos N log_entries del mismo fingerprint, ordenados timestamp DESC. */
+  similarEvents: WireSimilarEvent[];
+}
+
+// =============================================================================
+// /audit — eventos de auditoría
+// =============================================================================
+
+export interface WireAuditEvent {
+  id: string;
+  timestamp: string;
+  tenantId: string | null;
+  actorId: string | null;
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  metadata: unknown;
+}
+
+export interface WireQueryAuditResult {
+  rows: WireAuditEvent[];
+}
+
+// =============================================================================
+// /tenants — listado de tenants activos para los selectores de filtro
+// =============================================================================
+
+export interface WireTenantOption {
+  id: string;
+  name: string;
+}
+
+export interface WireListTenantsResult {
+  rows: WireTenantOption[];
+}
+
+// =============================================================================
+// /traces — spans de un trace para el waterfall
+// =============================================================================
+
+export interface WireSpanRecord {
+  span_id: string;
+  trace_id: string;
+  parent_span_id: string | null;
+  name: string;
+  kind: string | null;
+  start_time: string;
+  end_time: string | null;
+  /** int8 serializado como string para preservar precisión más allá de Number.MAX_SAFE_INTEGER. */
+  duration_ns: string | null;
+  status_code: number | null;
+  status_message: string | null;
+  service_name: string | null;
+  tenant_id: string | null;
+  request_id: string | null;
+  attributes: unknown;
+  resource: unknown;
+  events: unknown;
+}
+
+export interface WireTraceQueryResult {
+  trace_id: string;
+  count: number;
+  spans: WireSpanRecord[];
+  /** true cuando el trace supera el límite del repositorio y se devuelven solo los primeros. */
+  truncated: boolean;
+}

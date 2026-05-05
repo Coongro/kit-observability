@@ -1,0 +1,486 @@
+/* =========================================================
+   Coongro · kit-observability — observability.css
+   Snapshot del design system v2.2 (abril 2026) embebido localmente.
+
+   Contenido:
+   1) @font-face — Roboto, Noto Serif JP, JetBrains Mono (asset local)
+   2) :root tokens — colores, semantic aliases, type, spacing, radii, shadows
+   3) BASE
+   4) Type utilities (.t-*)
+   5) Component primitives (.badge, .btn, .card, .input, .tbl, etc.)
+   6) Adiciones del plugin: --font-mono, .mono
+
+   Decisión COONG-118: el plugin embebe esta copia para no acoplarse al
+   redesign global en curso de Coongro. Cuando aterrice ese redesign,
+   se reevalúa si se sincronizan los tokens o se mantiene este snapshot.
+   ========================================================= */
+
+/* =========================================================
+   1) FUENTES
+   Roboto + Noto Serif JP via jsdelivr (igual que el design system core).
+   JetBrains Mono se sirve como asset local del plugin (./dist/assets/fonts/).
+   ========================================================= */
+@font-face {
+  font-family: 'Noto Serif JP';
+  font-style: normal;
+  font-weight: 900;
+  font-display: block;
+  src: url('https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-jp@5/files/noto-serif-jp-latin-900-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Serif JP';
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url('https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-jp@5/files/noto-serif-jp-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/npm/@fontsource/roboto@5/files/roboto-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/npm/@fontsource/roboto@5/files/roboto-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/npm/@fontsource/roboto@5/files/roboto-latin-700-normal.woff2') format('woff2');
+}
+/* JetBrains Mono — local asset, no CDN. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+}
+
+/* =========================================================
+   2) TOKENS
+   ========================================================= */
+:root {
+  /* --- Gold · brand, primary actions --- */
+  --gold-deep: #C08527;
+  --gold-dk:   #E5B028;
+  --gold:      #FFC633;
+  --gold-lt:   #FFE29A;
+  --gold-soft: #FFF3DA;
+
+  /* --- Teal · success, positive --- */
+  --teal-deep: #1F5040;
+  --teal-dk:   #3D7A64;
+  --teal:      #7DB09F;
+  --teal-lt:   #C6DDD2;
+  --teal-soft: #DEEBE7;
+
+  /* --- Red · error, danger, destructive --- */
+  --red-deep: #6B2014;
+  --red-dk:   #A83420;
+  --red:      #DD4F34;
+  --red-lt:   #FACBC4;
+  --red-soft: #FDECE8;
+
+  /* --- Pink · decorative only --- */
+  --pink-deep: #5C1E26;
+  --pink-dk:   #C85260;
+  --pink:      #F28590;
+  --pink-lt:   #F9C1CA;
+  --pink-soft: #FDEAED;
+
+  /* --- Sky · decorative only --- */
+  --sky-deep: #4F7278;
+  --sky-dk:   #7BA9A6;
+  --sky:      #A7DFD3;
+  --sky-lt:   #C6E9DE;
+  --sky-soft: #E5F2ED;
+
+  /* --- Neutrals --- */
+  --black:       #000000;
+  --neutral-950: #1F1F1F;
+  --neutral-700: #707070;
+  --neutral-500: #B7B7B7;
+  --neutral-300: #D4D4CE;
+  --neutral-200: #F1F1EA;
+  --neutral-100: #F9F9F9;
+  --white:       #FFFFFF;
+
+  /* --- Semantic aliases --- */
+  --text-primary:   var(--neutral-950);
+  --text-secondary: var(--neutral-700);
+  --text-tertiary:  var(--neutral-500);
+  --text-placeholder: var(--neutral-500);
+  --text-inverse:   var(--white);
+
+  --border-card-web: var(--neutral-300);
+  --border-card-app: var(--neutral-700);
+  --border-divider:  var(--neutral-300);
+  --border-input:    var(--neutral-300);
+  --border-hair:     0.5px;
+
+  --bg-surface:        var(--white);
+  --bg-highlight-web:  var(--neutral-200);
+  --bg-highlight-app:  var(--neutral-100);
+  --bg-warm:           var(--neutral-200);
+  --bg-dark:           var(--neutral-950);
+
+  --accent-primary:    var(--gold);
+  --accent-hover:      var(--gold-dk);
+  --success:           var(--teal);
+  --success-text-on-soft: var(--teal-deep);
+  --danger:            var(--red);
+  --danger-text-on-soft:  var(--red-deep);
+  --warning:           var(--gold);
+  --warning-text-on-soft: var(--gold-deep);
+
+  /* --- Type --- */
+  --font-sans:  'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  --font-serif: 'Noto Serif JP', 'Times New Roman', serif;
+  --font-mono:  'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --fs-eyebrow:     11px;
+  --fs-badge:       11px;
+  --fs-label:       11px;
+  --fs-table-head:  12px;
+  --fs-subtitle:    13px;
+  --fs-body:        14px;
+  --fs-display-sm:  18px;
+  --fs-display-md:  22px;
+  --fs-display-lg:  32px;
+  --fs-display-xl:  48px;
+  --fs-display-2xl: 64px;
+
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-bold:    700;
+  --fw-black:   900;
+
+  /* --- Spacing / radii / shadows --- */
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 14px;
+  --space-7: 16px;
+  --space-8: 18px;
+  --space-9: 20px;
+  --space-10: 22px;
+  --space-12: 28px;
+  --space-14: 32px;
+  --space-16: 40px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+
+  --shadow-focus:  0 0 0 3px rgba(31,31,31,0.06);
+  --shadow-card:   0 1px 2px rgba(31,31,31,0.03);
+  --shadow-pop:    0 8px 24px rgba(31,31,31,0.08), 0 2px 6px rgba(31,31,31,0.04);
+  --shadow-dark:   0 8px 24px rgba(0,0,0,0.25);
+
+  --divider-dashed: 0.5px dashed var(--neutral-300);
+}
+
+/* =========================================================
+   3) BASE
+   No tocamos body globalmente: el shell de Coongro lo controla.
+   Solo aplicamos defaults dentro del scope del plugin si hace falta.
+   ========================================================= */
+
+/* =========================================================
+   4) TYPOGRAPHY UTILITIES
+   ========================================================= */
+.t-hero-number {
+  font-family: var(--font-serif);
+  font-weight: 900;
+  font-size: var(--fs-display-2xl);
+  line-height: 0.95;
+  letter-spacing: -2.5px;
+  -webkit-text-stroke: 0.4px currentColor;
+}
+
+.t-welcome {
+  font-family: var(--font-serif);
+  font-weight: 900;
+  font-size: var(--fs-display-xl);
+  line-height: 1.05;
+  letter-spacing: -1.5px;
+  -webkit-text-stroke: 0.3px currentColor;
+}
+
+.t-page-title {
+  font-family: var(--font-serif);
+  font-weight: 900;
+  font-size: var(--fs-display-lg);
+  line-height: 1;
+  letter-spacing: -0.8px;
+  -webkit-text-stroke: 0.3px currentColor;
+}
+
+.t-card-title {
+  font-family: var(--font-serif);
+  font-weight: 900;
+  font-size: var(--fs-display-md);
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+  -webkit-text-stroke: 0.25px currentColor;
+}
+
+.t-display-small {
+  font-family: var(--font-serif);
+  font-weight: 900;
+  font-size: var(--fs-display-sm);
+  line-height: 1;
+  letter-spacing: -0.3px;
+  -webkit-text-stroke: 0.2px currentColor;
+}
+
+.t-display-secondary {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  font-size: var(--fs-display-md);
+  line-height: 1.15;
+  letter-spacing: -0.3px;
+  -webkit-text-stroke: 0.2px currentColor;
+}
+
+.t-body {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.t-subtitle {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--fs-subtitle);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* Firma del sistema — letter-spacing NEGATIVO en px. Intencional. */
+.t-eyebrow {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: var(--fs-eyebrow);
+  letter-spacing: -0.3px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.t-badge {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: var(--fs-badge);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.t-section-label {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.t-table-head {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: var(--fs-table-head);
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+/* =========================================================
+   5) COMPONENT PRIMITIVES
+   ========================================================= */
+
+/* --- Badges · border-radius 4px siempre, nunca pill --- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 4px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.badge-success { background: var(--teal-soft); color: var(--teal-deep); }
+.badge-warning { background: var(--gold-soft); color: var(--gold-deep); }
+.badge-danger  { background: var(--red-soft);  color: var(--red-deep); }
+.badge-neutral { background: var(--neutral-200); color: var(--neutral-700); }
+.badge-dark    { background: var(--neutral-950); color: var(--white); }
+.badge .dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .7;
+}
+
+/* --- Buttons --- */
+.btn {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 0.5px solid transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  line-height: 1;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  white-space: nowrap;
+}
+.btn-primary       { background: var(--gold); color: var(--neutral-950); }
+.btn-primary:hover { background: var(--gold-dk); }
+.btn-secondary       { background: transparent; color: var(--neutral-950); border-color: var(--neutral-300); }
+.btn-secondary:hover { background: var(--neutral-200); }
+.btn-dark       { background: var(--neutral-950); color: var(--white); }
+.btn-dark:hover { background: #000; }
+.btn-danger-out       { background: transparent; color: var(--red); border-color: var(--red); }
+.btn-danger-out:hover { background: var(--red-soft); }
+.btn-danger       { background: var(--red); color: var(--white); }
+.btn-danger:hover { background: var(--red-dk); }
+.btn-ghost       { background: transparent; color: var(--neutral-950); }
+.btn-ghost:hover { background: var(--neutral-200); }
+.btn-sm { font-size: 12px; padding: 6px 12px; }
+.btn-lg { font-size: 14px; padding: 11px 20px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* --- Cards --- */
+.card {
+  background: var(--bg-surface);
+  border: 0.5px solid var(--border-card-web);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.card-app { border-color: var(--border-card-app); }
+.card-dark {
+  background: var(--neutral-950);
+  color: var(--white);
+  border: none;
+}
+
+/* --- Inputs --- */
+.input {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--white);
+  border: 0.5px solid var(--neutral-300);
+  border-radius: 8px;
+  padding: 10px 12px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.input::placeholder { color: var(--text-placeholder); }
+.input:focus {
+  border-color: var(--neutral-950);
+  box-shadow: var(--shadow-focus);
+}
+.input.error { border-color: var(--red); }
+.input.error:focus { box-shadow: 0 0 0 3px rgba(221,79,52,0.10); }
+
+.label {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--text-primary);
+  display: block;
+  margin-bottom: 6px;
+}
+
+/* --- Tablas · patrón crítico de divisores inset 32px --- */
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--neutral-700);
+  text-align: left;
+  padding: 18px 20px 14px;
+  position: relative;
+}
+.tbl th:first-child { padding-left: 32px; }
+.tbl th:last-child  { padding-right: 32px; text-align: right; }
+.tbl td {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--neutral-950);
+  padding: 20px;
+  position: relative;
+}
+.tbl td:first-child { padding-left: 32px; }
+.tbl td:last-child  { padding-right: 32px; text-align: right; }
+
+.tbl th::after,
+.tbl tbody tr:not(:last-child) td::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 0.5px;
+  background: var(--neutral-300);
+}
+.tbl th:first-child::after,
+.tbl tbody tr:not(:last-child) td:first-child::after { left: 32px; }
+.tbl th:last-child::after,
+.tbl tbody tr:not(:last-child) td:last-child::after  { right: 32px; }
+
+.tbl tr.row-total td { background: var(--neutral-100); }
+
+/* --- Divider · dashed suave --- */
+.divider-dashed {
+  border: 0;
+  border-top: 0.5px dashed var(--neutral-300);
+  margin: 0;
+}
+.divider-solid {
+  border: 0;
+  border-top: 0.5px solid var(--neutral-300);
+  margin: 0;
+}
+
+/* --- Eyebrow+Title stack canónico --- */
+.eyebrow-stack .t-eyebrow { margin: 0 0 6px; display: block; }
+.eyebrow-stack .t-page-title,
+.eyebrow-stack .t-card-title { margin: 0; }
+.eyebrow-stack .t-subtitle { margin: 6px 0 0; }
+
+/* =========================================================
+   6) ADICIONES DEL PLUGIN
+   ========================================================= */
+.mono {
+  font-family: var(--font-mono);
+}
