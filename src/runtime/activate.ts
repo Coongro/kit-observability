@@ -120,7 +120,7 @@ export async function activate(context: ModuleActivationContext): Promise<void> 
     config,
     dbSink: activeSink,
     spanSink: activeSpanSink,
-    auditLog: new AuditLog(systemDb),
+    auditLog: new AuditLog(systemDb, logger),
     removeSpanProcessor: context.api.removeSpanProcessor
       ? (p) => context.api.removeSpanProcessor(p)
       : undefined,

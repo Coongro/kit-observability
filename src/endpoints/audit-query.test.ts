@@ -69,12 +69,16 @@ describe('queryAuditEndpoint', () => {
     expect(args.from?.toISOString()).toBe('2026-05-01T00:00:00.000Z');
   });
 
-  it('ignora from/to inválidos (no rompe ni manda Date inválido)', async () => {
-    await queryAuditEndpoint(makeContext({ from: 'no-es-fecha', to: 'tampoco' }));
-    const args = queryMock.mock.calls[0]?.[0];
-    if (args === undefined) throw new Error('expected query call');
-    expect(args.from).toBeUndefined();
-    expect(args.to).toBeUndefined();
+  it('rechaza from inválido con 400 (alineado con logs-query)', async () => {
+    const result = await queryAuditEndpoint(makeContext({ from: 'no-es-fecha' }));
+    expect(result).toMatchObject({ code: 400 });
+    expect(queryMock).not.toHaveBeenCalled();
+  });
+
+  it('rechaza to inválido con 400', async () => {
+    const result = await queryAuditEndpoint(makeContext({ to: 'tampoco' }));
+    expect(result).toMatchObject({ code: 400 });
+    expect(queryMock).not.toHaveBeenCalled();
   });
 
   it('limit clamea al máximo de 1000', async () => {

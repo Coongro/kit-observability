@@ -100,10 +100,10 @@ export async function runBootstrap(raw: Sql, logger: BootstrapLogger): Promise<v
 }
 
 /**
- * Aplica todas las migrations necesarias desde `from` hasta `SCHEMA_VERSION`,
- * ejecutadas dentro de la transacción que el caller provee.
- * Cada caso de migración es responsable de dejar el schema listo para el
- * siguiente paso — el switch no tiene fallthrough intencional.
+ * Aplica las migrations necesarias desde `from` hasta `SCHEMA_VERSION`,
+ * dentro de la transacción que el caller provee. Cada `if (from < N)` cubre
+ * "todavía no llegamos a N", así migrations sucesivas se acumulan sin
+ * fallthrough explícito.
  */
 async function applyMigrations(raw: Sql, from: number, logger: BootstrapLogger): Promise<void> {
   if (from < 2) {

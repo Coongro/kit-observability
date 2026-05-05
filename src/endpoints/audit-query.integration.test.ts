@@ -52,7 +52,7 @@ describe.skipIf(skipIfNoDb)('queryAuditEndpoint (integration)', () => {
   beforeAll(async () => {
     sql = createTestSql();
     const systemDb = createTestSystemDatabase(sql);
-    audit = new AuditLog(systemDb);
+    audit = new AuditLog(systemDb, silentLogger);
     await resetObservabilitySchema(sql);
     await runBootstrap(sql, silentLogger);
 

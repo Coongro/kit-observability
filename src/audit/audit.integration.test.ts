@@ -32,7 +32,7 @@ describe.skipIf(skipIfNoDb)('AuditLog (integration)', () => {
 
   beforeAll(async () => {
     sql = createTestSql();
-    audit = new AuditLog(createTestSystemDatabase(sql));
+    audit = new AuditLog(createTestSystemDatabase(sql), silentLogger);
     await resetObservabilitySchema(sql);
     await runBootstrap(sql, silentLogger);
   });
@@ -94,14 +94,23 @@ describe.skipIf(skipIfNoDb)('AuditLog (integration)', () => {
       expect(rows[0]?.metadata).toBeNull();
     });
 
-    it('no lanza aunque el INSERT falle (fire-and-forget silencioso)', () => {
-      // record() usa this.db.raw.unsafe(...) — mockeamos el shape mínimo
-      // que satisface esa ruta y rechaza, para verificar el catch silencioso.
+    it('no lanza aunque el INSERT falle, pero loggea via logger.error', async () => {
       const brokenDb = {
         raw: { unsafe: () => Promise.reject(new Error('simulated DB failure')) },
       };
-      const badAudit = new AuditLog(brokenDb as never);
+      const errors: { msg: string; meta?: Record<string, unknown> }[] = [];
+      const captureLogger = {
+        error: (msg: string, meta?: Record<string, unknown>) => {
+          errors.push({ msg, meta });
+        },
+      };
+      const badAudit = new AuditLog(brokenDb as never, captureLogger);
       expect(() => badAudit.record({ action: 'should.fail' })).not.toThrow();
+      // Esperar al microtask del catch.
+      await new Promise<void>((r) => setTimeout(r, 10));
+      expect(errors).toHaveLength(1);
+      expect(errors[0]?.msg).toBe('audit.record_failed');
+      expect(errors[0]?.meta).toMatchObject({ action: 'should.fail' });
     });
 
     it('genera id uuid y timestamp automáticamente', async () => {

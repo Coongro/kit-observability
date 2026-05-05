@@ -28,17 +28,34 @@ export interface AuditEventQuery {
   limit?: number;
 }
 
+/** Logger mínimo para reportar fallos de audit sin acoplar al facade completo. */
+export interface AuditLogger {
+  error: (msg: string, meta?: Record<string, unknown>) => void;
+}
+
 /**
  * Registra y consulta eventos de auditoría.
  *
- * `record()` es fire-and-forget: los errores se capturan silenciosamente
- * para que un fallo de auditoría nunca bloquee la operación principal.
- * `query()` es async y puede lanzar.
+ * `record()` es fire-and-forget para el caller: nunca bloquea ni lanza la
+ * operación principal. PERO no es 100% silencioso — los errores se ruteán al
+ * `logger.error` inyectado, así un audit table caído deja huella en el log
+ * operacional (que va al DBSink y a stdout). Sin esto, una semana entera de
+ * audit roto pasaría desapercibida.
+ *
+ * `query()` es async normal y puede lanzar.
  */
 export class AuditLog {
-  constructor(private readonly db: SystemDatabase) {}
+  constructor(
+    private readonly db: SystemDatabase,
+    private readonly logger: AuditLogger
+  ) {}
 
   record(entry: AuditEventInput): void {
+    // Raw SQL en lugar de Drizzle insert: drizzle-orm 0.38.x tiene un bug con
+    // `pgSchema().table()` donde las columnas nullable no aparecen en
+    // `$inferInsert`, dejando el INSERT type-incompatible (memoria
+    // `drizzle_pgschema_insert_type_bug.md`). `query()` abajo sí usa Drizzle
+    // porque el bug solo afecta inserts.
     this.db.raw
       .unsafe(
         `INSERT INTO "${OBSERVABILITY_SCHEMA_NAME}"."${AUDIT_EVENTS_TABLE}"
@@ -55,7 +72,14 @@ export class AuditLog {
             : null,
         ]
       )
-      .catch(() => undefined);
+      .catch((err: unknown) => {
+        this.logger.error('audit.record_failed', {
+          action: entry.action,
+          entityType: entry.entityType ?? null,
+          entityId: entry.entityId ?? null,
+          err: err instanceof Error ? { message: err.message, name: err.name } : String(err),
+        });
+      });
   }
 
   async query(filters: AuditEventQuery = {}): Promise<AuditEventRow[]> {
