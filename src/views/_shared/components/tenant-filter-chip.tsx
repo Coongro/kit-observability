@@ -6,6 +6,7 @@
 import { getHostReact } from '@coongro/plugin-sdk';
 
 import { listTenants, type TenantOption } from '../api.js';
+import { shortenId } from '../lib/format-id.js';
 
 import { DropdownFilterChip, type DropdownFilterChipItem } from './dropdown-filter-chip.js';
 
@@ -28,7 +29,7 @@ export function TenantFilterChip({ tenantId, setTenantId, knownTenants }: Tenant
     setValue: setTenantId,
     placeholder: 'tenant_id (UUID)',
     allLabel: 'todos los tenants',
-    formatUnknownValue: shorten,
+    formatUnknownValue: shortenId,
     knownItems,
     fetcher: knownItems
       ? undefined
@@ -37,11 +38,5 @@ export function TenantFilterChip({ tenantId, setTenantId, knownTenants }: Tenant
 }
 
 function toItem(t: TenantOption): DropdownFilterChipItem {
-  return { id: t.id, name: t.name, hint: shorten(t.id) };
-}
-
-/** Acorta un UUID a `xxxxxxxx…yyyy` para chips/listas densas. */
-function shorten(id: string): string {
-  if (id.length <= 12) return id;
-  return `${id.slice(0, 8)}…${id.slice(-4)}`;
+  return { id: t.id, name: t.name, hint: shortenId(t.id) };
 }

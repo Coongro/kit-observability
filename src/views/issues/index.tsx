@@ -17,10 +17,11 @@ import {
   type LogIssue,
 } from '../_shared/api.js';
 import { ObsIcon } from '../_shared/components/icons.js';
+import { InlineError } from '../_shared/components/inline-error.js';
 import { PageHeader } from '../_shared/components/page-header.js';
 import { ResultsBar } from '../_shared/components/results-bar.js';
 import { copyToClipboard } from '../_shared/lib/clipboard.js';
-import { formatError, useFetch } from '../_shared/use-fetch.js';
+import { useFetch } from '../_shared/use-fetch.js';
 
 import { DEFAULT_FILTERS, IssuesFilterBar, type IssuesFilters } from './filter-bar.js';
 import { IssueDetail } from './issue-detail.js';
@@ -349,26 +350,6 @@ function Th({
       },
     },
     children
-  );
-}
-
-function InlineError({ error, onRetry }: { error: Error; onRetry: () => void }) {
-  return h(
-    'div',
-    {
-      style: {
-        margin: 22,
-        padding: 16,
-        background: 'var(--red-soft)',
-        border: '0.5px solid var(--red)',
-        borderRadius: 8,
-        color: 'var(--red-deep)',
-        fontFamily: 'var(--font-mono)',
-        fontSize: 12,
-      },
-    },
-    h('div', { style: { marginBottom: 10 } }, formatError(error)),
-    h('button', { className: 'btn btn-secondary btn-sm', onClick: onRetry }, 'reintentar')
   );
 }
 

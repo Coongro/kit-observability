@@ -14,10 +14,12 @@ import { getHostReact, usePlugin } from '@coongro/plugin-sdk';
 
 import { queryLogs, type LogEntry } from '../_shared/api.js';
 import { ObsIcon } from '../_shared/components/icons.js';
+import { InlineError } from '../_shared/components/inline-error.js';
 import { PageHeader } from '../_shared/components/page-header.js';
 import { ResultsBar } from '../_shared/components/results-bar.js';
+import { StickyTh } from '../_shared/components/sticky-th.js';
 import { copyToClipboard } from '../_shared/lib/clipboard.js';
-import { formatError, useFetch } from '../_shared/use-fetch.js';
+import { useFetch } from '../_shared/use-fetch.js';
 
 import { DEFAULT_STREAM_FILTERS, StreamFilterBar, type StreamFilters } from './filter-bar.js';
 import { RequestIdBand } from './request-id-band.js';
@@ -248,14 +250,14 @@ function StreamTable({ entries, loading, expanded, onToggle, onFollowRequest }: 
       h(
         'tr',
         null,
-        h(ThSticky, null, ''),
-        h(ThSticky, null, 'timestamp'),
-        h(ThSticky, null, 'level'),
-        h(ThSticky, null, 'source'),
-        h(ThSticky, null, 'message'),
-        h(ThSticky, null, 'request_id'),
-        h(ThSticky, null, 'tenant'),
-        h(ThSticky, { align: 'right' }, 'acciones')
+        h(StickyTh, { tight: true }, ''),
+        h(StickyTh, { tight: true }, 'timestamp'),
+        h(StickyTh, { tight: true }, 'level'),
+        h(StickyTh, { tight: true }, 'source'),
+        h(StickyTh, { tight: true }, 'message'),
+        h(StickyTh, { tight: true }, 'request_id'),
+        h(StickyTh, { tight: true }, 'tenant'),
+        h(StickyTh, { tight: true, align: 'right' }, 'acciones')
       )
     ),
     h(
@@ -311,57 +313,6 @@ function StreamTable({ entries, loading, expanded, onToggle, onFollowRequest }: 
           )
         : null
     )
-  );
-}
-
-function ThSticky({
-  children,
-  align = 'left',
-}: {
-  children?: React.ReactNode;
-  align?: 'left' | 'right';
-}) {
-  return h(
-    'th',
-    {
-      style: {
-        fontFamily: 'var(--font-sans)',
-        fontWeight: 500,
-        fontSize: 10.5,
-        color: 'var(--neutral-700)',
-        textAlign: align,
-        padding: '7px 10px',
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase',
-        whiteSpace: 'nowrap',
-        position: 'sticky',
-        top: 0,
-        zIndex: 2,
-        background: 'var(--neutral-100)',
-        borderBottom: '0.5px solid var(--neutral-300)',
-      },
-    },
-    children
-  );
-}
-
-function InlineError({ error, onRetry }: { error: Error; onRetry: () => void }) {
-  return h(
-    'div',
-    {
-      style: {
-        margin: 22,
-        padding: 16,
-        background: 'var(--red-soft)',
-        border: '0.5px solid var(--red)',
-        borderRadius: 8,
-        color: 'var(--red-deep)',
-        fontFamily: 'var(--font-mono)',
-        fontSize: 12,
-      },
-    },
-    h('div', { style: { marginBottom: 10 } }, formatError(error)),
-    h('button', { className: 'btn btn-secondary btn-sm', onClick: onRetry }, 'reintentar')
   );
 }
 

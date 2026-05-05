@@ -5,6 +5,7 @@ import { CopyBtn } from '../_shared/components/copy-btn.js';
 import { ObsIcon } from '../_shared/components/icons.js';
 import { JsonTree } from '../_shared/components/json-tree.js';
 import { LevelBadge } from '../_shared/components/level-badge.js';
+import { shortenId } from '../_shared/lib/format-id.js';
 import { absTime } from '../_shared/lib/format-time.js';
 import { LEVEL } from '../_shared/lib/levels.js';
 
@@ -155,7 +156,7 @@ export function StreamRow({ entry, expanded, onToggle, onFollowRequest }: Stream
                   whiteSpace: 'nowrap',
                 },
               },
-              shorten(entry.tenant_id)
+              shortenId(entry.tenant_id)
             )
           : h(
               'span',
@@ -234,11 +235,6 @@ function buildExpandedJson(entry: LogEntry): Record<string, unknown> {
   if (entry.metadata !== null && entry.metadata !== undefined) out.metadata = entry.metadata;
   if (entry.error !== null && entry.error !== undefined) out.error = entry.error;
   return out;
-}
-
-function shorten(id: string): string {
-  if (id.length <= 14) return id;
-  return `${id.slice(0, 8)}…${id.slice(-4)}`;
 }
 
 function tightTd() {
