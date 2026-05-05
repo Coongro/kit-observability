@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import type { AuditEventQuery } from '../audit/index.js';
 import { clearRuntimeState, setRuntimeState } from '../runtime/state.js';
@@ -11,10 +11,20 @@ const makeContext = (
   ({ query }) as unknown as Parameters<typeof queryAuditEndpoint>[0];
 
 describe('queryAuditEndpoint', () => {
-  let queryMock: ReturnType<typeof vi.fn<[AuditEventQuery], Promise<unknown[]>>>;
+  // `Mock` sin generics: vitest 1.x lo declara como `Mock<TArgs[], TReturn>` y
+  // vitest 2.x como `Mock<T extends Procedure>`. Sin type args explícitos
+  // resuelve a `any` en ambos, evitando que los tests fallen en CI Linux
+  // (vitest 2.x) cuando localmente el resolver agarra otra versión.
+  let queryMock: Mock;
+
+  const lastQueryArgs = (): AuditEventQuery => {
+    const call = queryMock.mock.calls[0] as [AuditEventQuery] | undefined;
+    if (call === undefined) throw new Error('expected query call');
+    return call[0];
+  };
 
   beforeEach(() => {
-    queryMock = vi.fn<[AuditEventQuery], Promise<unknown[]>>().mockResolvedValue([]);
+    queryMock = vi.fn().mockResolvedValue([]);
     setRuntimeState({
       auditLog: { query: queryMock } as never,
     } as never);
@@ -27,8 +37,7 @@ describe('queryAuditEndpoint', () => {
   it('sin query params, llama auditLog.query con limit default 100', async () => {
     await queryAuditEndpoint(makeContext({}));
     expect(queryMock).toHaveBeenCalledTimes(1);
-    const args = queryMock.mock.calls[0]?.[0];
-    if (args === undefined) throw new Error('expected query call');
+    const args = lastQueryArgs();
     expect(args.limit).toBe(100);
     expect(args.tenantId).toBeUndefined();
     expect(args.from).toBeUndefined();
@@ -44,8 +53,7 @@ describe('queryAuditEndpoint', () => {
         entity_id: 'abc',
       })
     );
-    const args = queryMock.mock.calls[0]?.[0];
-    if (args === undefined) throw new Error('expected query call');
+    const args = lastQueryArgs();
     expect(args).toMatchObject({
       tenantId: '11111111-1111-1111-1111-111111111111',
       actorId: '22222222-2222-2222-2222-222222222222',
@@ -62,8 +70,7 @@ describe('queryAuditEndpoint', () => {
         to: '2026-05-04T23:59:59Z',
       })
     );
-    const args = queryMock.mock.calls[0]?.[0];
-    if (args === undefined) throw new Error('expected query call');
+    const args = lastQueryArgs();
     expect(args.from).toBeInstanceOf(Date);
     expect(args.to).toBeInstanceOf(Date);
     expect(args.from?.toISOString()).toBe('2026-05-01T00:00:00.000Z');
@@ -83,22 +90,19 @@ describe('queryAuditEndpoint', () => {
 
   it('limit clamea al máximo de 1000', async () => {
     await queryAuditEndpoint(makeContext({ limit: '99999' }));
-    const args = queryMock.mock.calls[0]?.[0];
-    if (args === undefined) throw new Error('expected query call');
+    const args = lastQueryArgs();
     expect(args.limit).toBe(1000);
   });
 
   it('limit inválido cae al default 100', async () => {
     await queryAuditEndpoint(makeContext({ limit: 'abc' }));
-    const args = queryMock.mock.calls[0]?.[0];
-    if (args === undefined) throw new Error('expected query call');
+    const args = lastQueryArgs();
     expect(args.limit).toBe(100);
   });
 
   it('strings vacíos se tratan como undefined', async () => {
     await queryAuditEndpoint(makeContext({ tenant_id: '', action: '   ' }));
-    const args = queryMock.mock.calls[0]?.[0];
-    if (args === undefined) throw new Error('expected query call');
+    const args = lastQueryArgs();
     expect(args.tenantId).toBeUndefined();
     expect(args.action).toBeUndefined();
   });
