@@ -154,6 +154,8 @@ export interface QueryLogsParams {
   level?: number;
   source?: string;
   tenantId?: string;
+  /** Filtra por request_id exacto. Lo usa el "seguir request_id" del Stream view. */
+  requestId?: string;
   from?: string;
   to?: string;
   q?: string;
@@ -167,6 +169,7 @@ export function queryLogs(params: QueryLogsParams = {}): Promise<WireQueryLogsRe
     level: params.level,
     source: params.source,
     tenant_id: params.tenantId,
+    request_id: params.requestId,
     from: params.from,
     to: params.to,
     q: params.q,

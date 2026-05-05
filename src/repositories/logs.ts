@@ -10,6 +10,13 @@ export interface LogQueryFilters {
   level?: number;
   source?: string;
   tenantId?: string;
+  /**
+   * Filtra por `request_id` exacto. Es la pieza central del Stream view
+   * (hero filter "seguir request_id") porque buscar la cadena completa
+   * de un request es lo más útil al debuggear — pero se aplica a través
+   * del filtro en el endpoint, NO con `q` (que hace ILIKE en `message`).
+   */
+  requestId?: string;
   from?: string;
   to?: string;
   q?: string;
@@ -43,6 +50,7 @@ export async function queryLogs(raw: Sql, filters: LogQueryFilters): Promise<Log
     .eq('level', filters.level)
     .eq('source', filters.source)
     .eq('tenant_id', filters.tenantId, { cast: 'uuid' })
+    .eq('request_id', filters.requestId)
     .gte('timestamp', filters.from, { cast: 'timestamptz' })
     .lte('timestamp', filters.to, { cast: 'timestamptz' })
     .ilike('message', filters.q)

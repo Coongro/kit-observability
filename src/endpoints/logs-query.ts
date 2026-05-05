@@ -13,7 +13,8 @@ import { queryLogsService } from '../services/logs.service.js';
 /**
  * GET /plugins/kit-observability/logs/query
  *
- * Query params: level, source, tenant_id, from (ISO), to (ISO), q, limit, offset
+ * Query params: level, source, tenant_id, request_id, from (ISO), to (ISO),
+ * q, limit, offset.
  */
 export async function queryLogsEndpoint(context: HttpEndpointContext): Promise<unknown> {
   const { query } = context;
@@ -27,6 +28,7 @@ export async function queryLogsEndpoint(context: HttpEndpointContext): Promise<u
     level,
     source: parseOptionalString(query['source']),
     tenantId: parseOptionalString(query['tenant_id']),
+    requestId: parseOptionalString(query['request_id']),
     from: parseOptionalIso(query['from']),
     to: parseOptionalIso(query['to']),
     q: parseOptionalString(query['q']),
