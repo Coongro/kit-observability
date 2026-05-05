@@ -39,3 +39,9 @@ export {
   ISSUE_STATUS,
   type IssueStatus,
 } from './log-issues.js';
+export {
+  auditEvents,
+  type AuditEventRow,
+  type NewAuditEventRow,
+  AUDIT_EVENTS_TABLE,
+} from './audit-events.js';

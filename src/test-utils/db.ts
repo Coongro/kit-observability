@@ -1,3 +1,5 @@
+import type { SystemDatabase } from '@coongro/database-core';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
 
@@ -65,6 +67,20 @@ export async function listChildPartitions(
     [parentSchema, parentTable]
   );
   return rows.map((r) => r.relname);
+}
+
+/**
+ * Crea un SystemDatabase mínimo para tests de integración.
+ * Envuelve una conexión postgres.js con un `ormQuery` compatible con el
+ * contrato de SystemDatabase — sin necesidad de levantar el stack completo.
+ */
+export function createTestSystemDatabase(sql: Sql): SystemDatabase {
+  const db = drizzle(sql);
+  return {
+    raw: sql,
+    orm: db as unknown as SystemDatabase['orm'],
+    ormQuery: <T>(fn: (d: typeof db) => Promise<T>): Promise<T> => fn(db),
+  };
 }
 
 export interface SilentLogger {

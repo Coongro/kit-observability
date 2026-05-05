@@ -23,6 +23,7 @@ export {
   logEntries,
   logSpans,
   logIssues,
+  auditEvents,
   type LogEntryRow,
   type NewLogEntryRow,
   type LogSpanRow,
@@ -31,4 +32,8 @@ export {
   type NewLogIssueRow,
   type IssueStatus,
   ISSUE_STATUS,
+  type AuditEventRow,
+  type NewAuditEventRow,
+  AUDIT_EVENTS_TABLE,
 } from './schema/index.js';
+export { AuditLog, type AuditEventInput, type AuditEventQuery } from './audit/index.js';

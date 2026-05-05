@@ -40,15 +40,6 @@ type LoggerCall = (msg: string, meta?: Record<string, unknown>) => void;
 
 const PLUGIN_PREFIX = '[kit-observability]';
 
-function pickCallable(...candidates: unknown[]): LoggerCall | null {
-  for (const c of candidates) {
-    if (typeof c === 'function') {
-      return c as LoggerCall;
-    }
-  }
-  return null;
-}
-
 const noop: LoggerCall = () => {};
 
 const consoleError: LoggerCall = (msg, meta) => {
@@ -63,13 +54,14 @@ const consoleWarn: LoggerCall = (msg, meta) => {
 
 export function adaptLogger(raw: unknown): CompatLogger {
   const r = (raw ?? {}) as MaybeRawLogger;
+  // bind(r) preserva el `this` del logger host — sin esto, métodos de clase
+  // como Logger.info() llaman `this.dispatch()` con `this` incorrecto y lanzan.
+  const b = (fn: unknown): LoggerCall | null =>
+    typeof fn === 'function' ? ((fn as LoggerCall).bind(r) as LoggerCall) : null;
   return {
-    info: pickCallable(r.info, r.log) ?? noop,
-    debug: pickCallable(r.debug) ?? noop,
-    // error/warn caen a console en vez de noop: perder logs de error sería
-    // peor que ensuciar stderr. Si el host nunca proveyó estos métodos,
-    // el console.error de fallback al menos deja breadcrumb visible.
-    warn: pickCallable(r.warn) ?? consoleWarn,
-    error: pickCallable(r.error) ?? consoleError,
+    info: b(r.info) ?? b(r.log) ?? noop,
+    debug: b(r.debug) ?? noop,
+    warn: b(r.warn) ?? consoleWarn,
+    error: b(r.error) ?? consoleError,
   };
 }

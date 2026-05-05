@@ -1,14 +1,16 @@
 import { addSink, getSink } from '@coongro/core-logging';
 import type { ModuleActivationContext } from '@coongro/module-core';
 
+import { AuditLog } from '../audit/index.js';
 import { runBootstrap } from '../bootstrap/run-bootstrap.js';
 import { loadConfig } from '../config.js';
 import { registerPartitions } from '../partitions/register.js';
 import { DBSink } from '../sinks/db-sink.js';
 import { FileFailsafeWriter } from '../sinks/failsafe-writer.js';
+import { SpanSink } from '../sinks/span-sink.js';
 
 import { adaptLogger } from './compat-logger.js';
-import { setRuntimeState } from './state.js';
+import { getRuntimeStateOrNull, setRuntimeState } from './state.js';
 
 /**
  * activate() del plugin. Llamado por el plugin loader del API al boot
@@ -70,25 +72,67 @@ export async function activate(context: ModuleActivationContext): Promise<void> 
     // FileFailsafeWriter que abrimos arriba, y previene un leak por cada
     // re-activación.
     const existing = getSink(newSink.id);
-    if (existing instanceof DBSink) {
-      activeSink = existing;
+    // Duck-typing por id en vez de instanceof: cada tenant eager carga el plugin
+    // en su propio snapshot de módulo, haciendo que instanceof falle entre
+    // instancias aunque el objeto sea funcionalmente el mismo DBSink.
+    if (existing !== null && existing.id === newSink.id) {
+      activeSink = existing as unknown as DBSink;
       await newSink.close();
       logger.warn('DBSink already registered, reusing existing instance from registry');
     } else {
-      // Caso patológico: un sink con nuestro id existe pero NO es nuestro.
-      // No podemos asumir su shape — fail fast.
+      // Caso patológico: un sink con nuestro id existe pero tiene ID distinto.
       await newSink.close();
       throw new Error(
-        `[kit-observability] sink id "${newSink.id}" is registered by a non-DBSink instance — cannot continue`
+        `[kit-observability] getSink("${newSink.id}") returned unexpected sink — cannot continue`
       );
     }
   }
 
-  setRuntimeState({ systemDb, config, dbSink: activeSink });
+  // ── SpanSink ──────────────────────────────────────────────────────────────
+  // Mismo patrón de idempotencia que DBSink: en hot-reload, RuntimeState ya
+  // tiene una instancia activa registrada en el OTel provider — reutilizarla
+  // en vez de añadir un segundo processor al fan-out.
+  const prevState = getRuntimeStateOrNull();
+  let activeSpanSink: SpanSink;
+  let spanSinkReused = false;
+
+  if (prevState?.spanSink) {
+    activeSpanSink = prevState.spanSink;
+    spanSinkReused = true;
+    logger.warn('SpanSink already active in OTel provider, reusing existing instance');
+  } else {
+    const spanFailsafe = new FileFailsafeWriter(
+      config.failsafeDir,
+      config.failsafeMaxFileBytes,
+      config.failsafeMaxFiles
+    );
+    activeSpanSink = new SpanSink({
+      raw: systemDb.raw,
+      batchSize: config.batchSize,
+      batchIntervalMs: config.batchIntervalMs,
+      failsafe: spanFailsafe,
+    });
+    context.api.addSpanProcessor?.(activeSpanSink);
+  }
+
+  setRuntimeState({
+    systemDb,
+    config,
+    dbSink: activeSink,
+    spanSink: activeSpanSink,
+    auditLog: new AuditLog(systemDb, logger),
+    removeSpanProcessor: context.api.removeSpanProcessor
+      ? (p) => context.api.removeSpanProcessor(p)
+      : undefined,
+  });
   logger.info('kit-observability activated', {
-    sinkId: activeSink.id,
+    dbSinkId: activeSink.id,
+    spanSinkId: activeSpanSink.id,
     batchSize: config.batchSize,
     batchIntervalMs: config.batchIntervalMs,
-    reused: !added,
+    dbSinkReused: !added,
+    spanSinkReused,
+    otelEnabled:
+      context.api.addSpanProcessor !== null && context.api.addSpanProcessor !== undefined,
   });
 }

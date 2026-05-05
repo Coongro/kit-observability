@@ -1,6 +1,7 @@
 import type { Sql } from 'postgres';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { AUDIT_EVENTS_TABLE } from '../schema/audit-events.js';
 import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
 import { LOG_ISSUES_TABLE } from '../schema/log-issues.js';
 import { LOG_SPANS_TABLE } from '../schema/log-spans.js';
@@ -12,8 +13,24 @@ import {
   silentLogger,
 } from '../test-utils/db.js';
 
+import {
+  CREATE_LOG_ENTRIES_INDEXES_SQL,
+  CREATE_LOG_ENTRIES_SQL,
+  CREATE_LOG_ISSUES_INDEXES_SQL,
+  CREATE_LOG_ISSUES_SQL,
+  CREATE_LOG_SPANS_INDEXES_SQL,
+  CREATE_LOG_SPANS_SQL,
+  CREATE_SCHEMA_SQL,
+  ENSURE_PGCRYPTO_SQL,
+} from './ddl.js';
 import { runBootstrap } from './run-bootstrap.js';
-import { SCHEMA_VERSION, SCHEMA_VERSION_TABLE, readVersion } from './schema-version.js';
+import {
+  CREATE_SCHEMA_VERSION_SQL,
+  SCHEMA_VERSION,
+  SCHEMA_VERSION_TABLE,
+  readVersion,
+  writeVersion,
+} from './schema-version.js';
 
 const dbUrl = getTestDbUrl();
 const skipIfNoDb = dbUrl === null;
@@ -33,7 +50,7 @@ describe.skipIf(skipIfNoDb)('runBootstrap (integration)', () => {
     await resetObservabilitySchema(sql);
   });
 
-  it('crea schema + 3 tablas + version row al primer bootstrap', async () => {
+  it('crea schema + todas las tablas + version row al primer bootstrap', async () => {
     await runBootstrap(sql, silentLogger);
 
     const schemas = await sql.unsafe<{ nspname: string }[]>(
@@ -50,6 +67,7 @@ describe.skipIf(skipIfNoDb)('runBootstrap (integration)', () => {
     expect(tableNames).toContain(LOG_ENTRIES_TABLE);
     expect(tableNames).toContain(LOG_SPANS_TABLE);
     expect(tableNames).toContain(LOG_ISSUES_TABLE);
+    expect(tableNames).toContain(AUDIT_EVENTS_TABLE);
     expect(tableNames).toContain(SCHEMA_VERSION_TABLE);
 
     expect(await readVersion(sql)).toBe(SCHEMA_VERSION);
@@ -72,6 +90,8 @@ describe.skipIf(skipIfNoDb)('runBootstrap (integration)', () => {
     expect(idxNames).toContain('idx_log_issues_last_seen');
     expect(idxNames).toContain('idx_log_issues_tenant_last_seen');
     expect(idxNames).toContain('idx_log_issues_status_last_seen');
+    expect(idxNames).toContain('idx_audit_events_ts');
+    expect(idxNames).toContain('idx_audit_events_tenant_ts');
   });
 
   it('declara log_entries y log_spans como PARTITION BY RANGE', async () => {
@@ -108,5 +128,43 @@ describe.skipIf(skipIfNoDb)('runBootstrap (integration)', () => {
         `INSERT INTO "${OBSERVABILITY_SCHEMA_NAME}"."${SCHEMA_VERSION_TABLE}" (id, version) VALUES (2, 99)`
       )
     ).rejects.toThrow();
+  });
+
+  describe('migración v1 → v2', () => {
+    it('aplica audit_events a un schema existente en v1', async () => {
+      // Simular un deploy previo que quedó en v1: crear el schema con las 3
+      // tablas originales y escribir version=1.
+      await sql.unsafe(ENSURE_PGCRYPTO_SQL);
+      await sql.unsafe(CREATE_SCHEMA_SQL);
+      await sql.unsafe(CREATE_SCHEMA_VERSION_SQL);
+      for (const stmt of [CREATE_LOG_ENTRIES_SQL, ...CREATE_LOG_ENTRIES_INDEXES_SQL]) {
+        await sql.unsafe(stmt);
+      }
+      for (const stmt of [CREATE_LOG_SPANS_SQL, ...CREATE_LOG_SPANS_INDEXES_SQL]) {
+        await sql.unsafe(stmt);
+      }
+      for (const stmt of [CREATE_LOG_ISSUES_SQL, ...CREATE_LOG_ISSUES_INDEXES_SQL]) {
+        await sql.unsafe(stmt);
+      }
+      await writeVersion(sql, 1);
+
+      // Verificar que audit_events NO existe todavía
+      const before = await sql.unsafe<{ tablename: string }[]>(
+        `SELECT tablename FROM pg_tables WHERE schemaname = $1 AND tablename = $2`,
+        [OBSERVABILITY_SCHEMA_NAME, AUDIT_EVENTS_TABLE]
+      );
+      expect(before).toHaveLength(0);
+
+      // Correr bootstrap — debe detectar v1 y migrar a v2
+      await runBootstrap(sql, silentLogger);
+
+      expect(await readVersion(sql)).toBe(SCHEMA_VERSION);
+
+      const after = await sql.unsafe<{ tablename: string }[]>(
+        `SELECT tablename FROM pg_tables WHERE schemaname = $1 AND tablename = $2`,
+        [OBSERVABILITY_SCHEMA_NAME, AUDIT_EVENTS_TABLE]
+      );
+      expect(after).toHaveLength(1);
+    });
   });
 });
