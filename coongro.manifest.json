@@ -38,6 +38,13 @@
         "icon": "assets/icons/health.svg",
         "color": "#C08527",
         "viewId": "kit-observability.salud.open"
+      },
+      {
+        "path": "Trace",
+        "order": 94,
+        "icon": "assets/icons/stream.svg",
+        "color": "#3D7A64",
+        "viewId": "kit-observability.trace.open"
       }
     ],
     "views": [
@@ -68,6 +75,13 @@
         "component": "./dist/views/health/index.js",
         "export": "HealthView",
         "layout": "full"
+      },
+      {
+        "id": "kit-observability.trace.open",
+        "title": "Trace",
+        "component": "./dist/views/trace/index.js",
+        "export": "TraceView",
+        "layout": "full"
       }
     ],
     "repositories": [],
@@ -92,6 +106,14 @@
         "method": "GET",
         "handler": "./dist/endpoints/traces.js",
         "export": "getTrace",
+        "auth": "jwt"
+      },
+      {
+        "id": "traces-recent",
+        "path": "/traces/recent",
+        "method": "GET",
+        "handler": "./dist/endpoints/traces-recent.js",
+        "export": "listRecentTracesEndpoint",
         "auth": "jwt"
       },
       {

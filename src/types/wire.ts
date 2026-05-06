@@ -239,3 +239,19 @@ export interface WireTraceQueryResult {
   /** true cuando el trace supera el límite del repositorio y se devuelven solo los primeros. */
   truncated: boolean;
 }
+
+export interface WireRecentTrace {
+  trace_id: string;
+  start_time: string;
+  /** Duración total del trace en nanosegundos. */
+  duration_ns: number;
+  span_count: number;
+  error_count: number;
+  service_name: string | null;
+  tenant_id: string | null;
+  root_name: string | null;
+}
+
+export interface WireListRecentTracesResult {
+  traces: WireRecentTrace[];
+}

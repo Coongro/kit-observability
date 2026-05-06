@@ -10,6 +10,7 @@ import type {
   WireIngestLogResponse,
   WireIssueDetail,
   WireIssueStatus,
+  WireListRecentTracesResult,
   WireListSourcesResult,
   WireListTenantsResult,
   WirePluginHealth,
@@ -33,6 +34,7 @@ export type {
   WireQueryAuditResult,
   WireQueryIssuesResult,
   WireQueryLogsResult,
+  WireRecentTrace as RecentTrace,
   WireSampleLogEntry as SampleLogEntry,
   WireSimilarEvent as SimilarEvent,
   WireSinkHealth as SinkHealth,
@@ -339,4 +341,15 @@ export function getTrace(
   return request<WireTraceQueryResult>(`/traces${buildQuery({ trace_id: traceId })}`, {
     signal: options.signal,
   });
+}
+
+// =============================================================================
+// 7b) GET /traces/recent — selector inicial de la vista Trace
+// =============================================================================
+
+export function listRecentTraces(
+  params: { limit?: number; signal?: AbortSignal } = {}
+): Promise<WireListRecentTracesResult> {
+  const qs = buildQuery({ limit: params.limit });
+  return request<WireListRecentTracesResult>(`/traces/recent${qs}`, { signal: params.signal });
 }

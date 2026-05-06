@@ -484,3 +484,13 @@
 .mono {
   font-family: var(--font-mono);
 }
+
+/* --- Animaciones reusables --- */
+@keyframes obs-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.85); }
+}
+@keyframes obs-drawer-slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}

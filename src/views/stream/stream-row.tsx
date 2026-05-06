@@ -1,4 +1,4 @@
-import { getHostReact } from '@coongro/plugin-sdk';
+import { getHostReact, usePlugin } from '@coongro/plugin-sdk';
 
 import type { LogEntry } from '../_shared/api.js';
 import { CopyBtn } from '../_shared/components/copy-btn.js';
@@ -8,6 +8,7 @@ import { LevelBadge } from '../_shared/components/level-badge.js';
 import { shortenId } from '../_shared/lib/format-id.js';
 import { absTime } from '../_shared/lib/format-time.js';
 import { LEVEL } from '../_shared/lib/levels.js';
+import { openTrace } from '../_shared/lib/open-trace.js';
 
 const React = getHostReact();
 const h = React.createElement;
@@ -27,6 +28,7 @@ export interface StreamRowProps {
  * propaga al hero filter del view (no es un toggle local).
  */
 export function StreamRow({ entry, expanded, onToggle, onFollowRequest }: StreamRowProps) {
+  const { views } = usePlugin();
   const [hover, setHover] = useState(false);
   const isError = entry.level >= LEVEL.ERROR;
 
@@ -184,10 +186,24 @@ export function StreamRow({ entry, expanded, onToggle, onFollowRequest }: Stream
                     ev.stopPropagation();
                     onFollowRequest();
                   },
-                  title: 'ver toda la cadena del request',
+                  title: 'filtrar log_entries por este request_id',
                   style: miniBtn(),
                 },
                 h(ObsIcon, { name: 'link', size: 11 })
+              )
+            : null,
+          entry.request_id
+            ? h(
+                'button',
+                {
+                  onClick: (ev: { stopPropagation: () => void }) => {
+                    ev.stopPropagation();
+                    openTrace(views, entry.request_id);
+                  },
+                  title: 'ver waterfall del trace',
+                  style: miniBtn(),
+                },
+                h(ObsIcon, { name: 'chevRight', size: 11 })
               )
             : null,
           h(CopyBtn, { value: entry, label: 'copiar entry como JSON', size: 11 })

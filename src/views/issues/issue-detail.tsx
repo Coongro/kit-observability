@@ -1,4 +1,4 @@
-import { getHostReact } from '@coongro/plugin-sdk';
+import { getHostReact, usePlugin } from '@coongro/plugin-sdk';
 
 import {
   getIssueDetail as fetchIssueDetail,
@@ -16,6 +16,7 @@ import {
   type StackFrameData,
 } from '../_shared/components/stack-frame.js';
 import { absTime, relTime } from '../_shared/lib/format-time.js';
+import { openTrace } from '../_shared/lib/open-trace.js';
 import { useFetch, formatError } from '../_shared/use-fetch.js';
 
 import { TimelineChart } from './timeline-chart.js';
@@ -480,6 +481,7 @@ function TenantsList({ tenants }: { tenants: IssueDetailData['affectedTenants'] 
 }
 
 function SimilarEventsList({ events }: { events: IssueDetailData['similarEvents'] }) {
+  const { views } = usePlugin();
   return h(
     'div',
     {
@@ -490,20 +492,24 @@ function SimilarEventsList({ events }: { events: IssueDetailData['similarEvents'
         overflow: 'hidden',
       },
     },
-    ...events.map((e, i) =>
-      h(
+    ...events.map((e, i) => {
+      const hasTrace = e.request_id !== null && e.request_id.length > 0;
+      return h(
         'div',
         {
           key: e.id,
+          onClick: hasTrace ? () => openTrace(views, e.request_id) : undefined,
+          title: hasTrace ? 'ver waterfall del trace' : undefined,
           style: {
             display: 'grid',
-            gridTemplateColumns: '90px 1fr 1fr',
+            gridTemplateColumns: '90px 1fr 1fr 24px',
             gap: 10,
             padding: '8px 14px',
             borderBottom: i < events.length - 1 ? '0.5px solid var(--neutral-300)' : 'none',
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
             alignItems: 'center',
+            cursor: hasTrace ? 'pointer' : 'default',
           },
         },
         h('span', { style: { color: 'var(--neutral-500)' } }, absTime(e.timestamp)),
@@ -519,9 +525,21 @@ function SimilarEventsList({ events }: { events: IssueDetailData['similarEvents'
           },
           e.message
         ),
-        h('span', { style: { color: 'var(--neutral-700)' } }, e.request_id ?? e.tenant_id ?? '—')
-      )
-    )
+        h(
+          'span',
+          {
+            style: {
+              color: hasTrace ? 'var(--teal-deep)' : 'var(--neutral-700)',
+              textDecoration: hasTrace ? 'underline' : 'none',
+            },
+          },
+          e.request_id ?? e.tenant_id ?? '—'
+        ),
+        hasTrace
+          ? h(ObsIcon, { name: 'chevRight', size: 11, style: { color: 'var(--neutral-500)' } })
+          : h('span')
+      );
+    })
   );
 }
 

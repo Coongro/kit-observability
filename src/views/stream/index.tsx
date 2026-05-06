@@ -14,6 +14,7 @@ import { getHostReact, usePlugin } from '@coongro/plugin-sdk';
 
 import { queryLogs, type LogEntry } from '../_shared/api.js';
 import { ObsIcon } from '../_shared/components/icons.js';
+import { IdInputBand } from '../_shared/components/id-input-band.js';
 import { InlineError } from '../_shared/components/inline-error.js';
 import { PageHeader } from '../_shared/components/page-header.js';
 import { ResultsBar } from '../_shared/components/results-bar.js';
@@ -22,7 +23,6 @@ import { copyToClipboard } from '../_shared/lib/clipboard.js';
 import { useFetch } from '../_shared/use-fetch.js';
 
 import { DEFAULT_STREAM_FILTERS, StreamFilterBar, type StreamFilters } from './filter-bar.js';
-import { RequestIdBand } from './request-id-band.js';
 import { StreamRow } from './stream-row.js';
 
 const React = getHostReact();
@@ -159,7 +159,13 @@ export function StreamView() {
         ),
       ],
     }),
-    h(RequestIdBand, { value: requestIdFilter, onChange: setRequestIdFilter }),
+    h(IdInputBand, {
+      value: requestIdFilter,
+      onChange: setRequestIdFilter,
+      label: 'SEGUIR REQUEST_ID',
+      placeholder: 'pegá un request_id (ej: req_01JR2K7T9V8Q) y vé la cadena completa…',
+      tone: 'gold',
+    }),
     h(StreamFilterBar, { filters, setFilters }),
     h(
       'div',
