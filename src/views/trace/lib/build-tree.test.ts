@@ -31,7 +31,8 @@ describe('buildTraceTree', () => {
   it('returns empty tree for empty input', () => {
     const tree = buildTraceTree([]);
     expect(tree.roots).toEqual([]);
-    expect(tree.totalSpans).toBe(0);
+    expect(tree.originalSpanCount).toBe(0);
+    expect(tree.visibleSpanCount).toBe(0);
     expect(tree.traceDurationMs).toBe(0);
   });
 
@@ -174,6 +175,38 @@ describe('applyFilters', () => {
     const filtered = applyFilters(tree, { minDurationMs: 0, errorsOnly: true });
     const ids = flattenTree(filtered).map((n) => n.span.span_id);
     expect(ids).toEqual(['a', 'c']);
+  });
+
+  it('preserves originalSpanCount and only updates visibleSpanCount', () => {
+    const tree = buildSample();
+    expect(tree.originalSpanCount).toBe(3);
+    expect(tree.visibleSpanCount).toBe(3);
+    const filtered = applyFilters(tree, { minDurationMs: 1, errorsOnly: false });
+    expect(filtered.originalSpanCount).toBe(3);
+    expect(filtered.visibleSpanCount).toBe(2);
+  });
+
+  it('sorts children locally by start_time even if input is shuffled', () => {
+    const tree = buildTraceTree([
+      makeSpan({
+        span_id: 'a',
+        start_time: '2026-01-01T00:00:00.000Z',
+        duration_ns: '100000000',
+      }),
+      makeSpan({
+        span_id: 'late',
+        parent_span_id: 'a',
+        start_time: '2026-01-01T00:00:00.030Z',
+        duration_ns: '5000000',
+      }),
+      makeSpan({
+        span_id: 'early',
+        parent_span_id: 'a',
+        start_time: '2026-01-01T00:00:00.010Z',
+        duration_ns: '5000000',
+      }),
+    ]);
+    expect(tree.roots[0].children.map((c) => c.span.span_id)).toEqual(['early', 'late']);
   });
 });
 

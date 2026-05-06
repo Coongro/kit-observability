@@ -9,12 +9,12 @@
 //   4. kind === 'PRODUCER'/'CONSUMER' (queue) → gold.
 //   5. INTERNAL u otros → neutral-700.
 //
-// El número 2 viene del enum SpanStatusCode de @opentelemetry/api donde
-// UNSET=0, OK=1, ERROR=2.
+// La referencia del status_code viene del enum SpanStatusCode de
+// @opentelemetry/api (UNSET=0, OK=1, ERROR=2) — ver `lib/otel.ts`.
 
 import type { SpanRecord } from '../../_shared/api.js';
 
-const OTEL_STATUS_CODE_ERROR = 2;
+import { OTEL_STATUS_CODE_ERROR } from './otel.js';
 
 export function spanBarColor(span: SpanRecord): string {
   if (span.status_code === OTEL_STATUS_CODE_ERROR) return 'var(--red)';

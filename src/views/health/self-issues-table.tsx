@@ -25,7 +25,10 @@ const SELF_SOURCES = new Set(['plugin:kit-observability', 'core:db', 'core:reten
 const SELF_ISSUES_LIMIT = 20;
 
 export function SelfIssuesTable() {
-  const { data, loading, error } = useFetch((signal) => queryIssues({ signal, limit: 100 }), []);
+  const { data, loading, error, refetch } = useFetch(
+    (signal) => queryIssues({ signal, limit: 100 }),
+    []
+  );
 
   const ownIssues = useMemo<LogIssue[]>(() => {
     const all = data?.rows ?? [];
@@ -86,7 +89,7 @@ export function SelfIssuesTable() {
           overflow: 'hidden',
         },
       },
-      h(SelfIssuesBody, { issues: ownIssues, loading, error })
+      h(SelfIssuesBody, { issues: ownIssues, loading, error, onRetry: () => void refetch() })
     )
   );
 }
@@ -95,9 +98,10 @@ interface BodyProps {
   issues: LogIssue[];
   loading: boolean;
   error: Error | null;
+  onRetry: () => void;
 }
 
-function SelfIssuesBody({ issues, loading, error }: BodyProps) {
+function SelfIssuesBody({ issues, loading, error, onRetry }: BodyProps) {
   if (error !== null) {
     return h(
       'div',
@@ -108,9 +112,14 @@ function SelfIssuesBody({ issues, loading, error }: BodyProps) {
           color: 'var(--red-deep)',
           fontFamily: 'var(--font-mono)',
           fontSize: 12,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          alignItems: 'center',
         },
       },
-      `error cargando issues: ${error.message}`
+      h('div', null, `error cargando issues: ${error.message}`),
+      h('button', { className: 'btn btn-secondary btn-sm', onClick: onRetry }, 'reintentar')
     );
   }
   return h(

@@ -66,9 +66,9 @@ export function deriveInsertErrorsStatus(sink: SinkHealth): HealthStatus {
 export function deriveGlobalStatus(sinks: SinkHealth[]): HealthStatus {
   let worst: HealthStatus = 'ok';
   for (const sink of sinks) {
-    worst = worse(worst, deriveQueueLagStatus(sink.queueLag));
-    worst = worse(worst, deriveFailsafeStatus(sink));
-    worst = worse(worst, deriveInsertErrorsStatus(sink));
+    worst = worseStatus(worst, deriveQueueLagStatus(sink.queueLag));
+    worst = worseStatus(worst, deriveFailsafeStatus(sink));
+    worst = worseStatus(worst, deriveInsertErrorsStatus(sink));
     if (worst === 'error') return 'error';
   }
   return worst;
@@ -102,7 +102,12 @@ export function deriveGlobalReason(sinks: { name: string; health: SinkHealth }[]
   return 'todos los sinks operando normalmente.';
 }
 
-function worse(a: HealthStatus, b: HealthStatus): HealthStatus {
+/**
+ * Severidad mayor entre dos estados (`error` > `warn` > `ok`). Exportada
+ * porque los cards de Salud combinan el estado por-sink en uno solo y
+ * reusarla evita re-implementar la prioridad en cada call-site.
+ */
+export function worseStatus(a: HealthStatus, b: HealthStatus): HealthStatus {
   if (a === 'error' || b === 'error') return 'error';
   if (a === 'warn' || b === 'warn') return 'warn';
   return 'ok';

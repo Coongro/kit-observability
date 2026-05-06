@@ -66,6 +66,10 @@ describe('deriveInsertErrorsStatus', () => {
 });
 
 describe('deriveGlobalStatus', () => {
+  it('returns ok for an empty sink list', () => {
+    expect(deriveGlobalStatus([])).toBe('ok');
+  });
+
   it('returns ok when all sinks are healthy', () => {
     expect(deriveGlobalStatus([HEALTHY, HEALTHY])).toBe('ok');
   });

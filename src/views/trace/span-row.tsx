@@ -9,13 +9,14 @@ import { formatDuration } from '../_shared/lib/format-time.js';
 
 import type { SpanNode } from './lib/build-tree.js';
 import { spanBarBackgroundColor, spanBarColor } from './lib/span-color.js';
+import {
+  WATERFALL_DEPTH_INDENT as DEPTH_INDENT,
+  WATERFALL_LABEL_COL_WIDTH as LABEL_COL_WIDTH,
+  WATERFALL_ROW_HEIGHT as ROW_HEIGHT,
+} from './lib/waterfall-layout.js';
 
 const React = getHostReact();
 const h = React.createElement;
-
-const ROW_HEIGHT = 26;
-const LABEL_COL_WIDTH = 320;
-const DEPTH_INDENT = 14;
 
 export interface SpanRowProps {
   node: SpanNode;

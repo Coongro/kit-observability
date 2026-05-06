@@ -7,7 +7,19 @@ const RECENT_TRACES_DEFAULT_LIMIT = 20;
 const RECENT_TRACES_MAX_LIMIT = 100;
 const SPANS_TABLE = `${OBSERVABILITY_SCHEMA_NAME}.log_spans`;
 
-export interface SpanRecord {
+/**
+ * Forma de una fila de log_spans tal como sale del driver postgres
+ * (campos `Date`/`bigint` antes de la serialización JSON). NO confundir
+ * con `WireSpanRecord` (mismo shape pero `string`/`string` post-JSON):
+ * el driver entrega Date/bigint, el frontend los recibe como ISO/string.
+ *
+ * Antes este tipo se llamaba `SpanRecord` y colisionaba por nombre con
+ * `WireSpanRecord` re-exportado como `SpanRecord` desde `_shared/api.ts`.
+ * Si alguien importaba el repo-side por accidente en el frontend,
+ * `Date.parse(date)` devolvía NaN y la cascada se colapsaba a 0
+ * silenciosamente. El nombre `SpanRow` deja explícito que es la fila DB.
+ */
+export interface SpanRow {
   span_id: string;
   trace_id: string;
   parent_span_id: string | null;
@@ -29,7 +41,7 @@ export interface SpanRecord {
 export interface TraceQueryResult {
   trace_id: string;
   count: number;
-  spans: SpanRecord[];
+  spans: SpanRow[];
   /** true cuando el trace supera MAX_SPANS_PER_TRACE y se devuelven solo los primeros */
   truncated: boolean;
 }
@@ -49,7 +61,7 @@ export async function queryTraceById(raw: Sql, traceId: string): Promise<TraceQu
      ORDER BY start_time ASC
      LIMIT $2`,
     [traceId, MAX_SPANS_PER_TRACE + 1]
-  )) as SpanRecord[];
+  )) as SpanRow[];
 
   const truncated = rows.length > MAX_SPANS_PER_TRACE;
   const spans = truncated ? rows.slice(0, MAX_SPANS_PER_TRACE) : rows;

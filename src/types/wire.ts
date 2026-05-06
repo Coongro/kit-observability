@@ -20,8 +20,12 @@
 //     `tenantId` automáticamente. NO se normalizó al resto para evitar un
 //     transform manual extra en el endpoint y porque el endpoint de audit
 //     es legacy (predates el resto de los endpoints).
+//   - `WireSinkHealth` / `WirePluginHealth` usan `camelCase` porque NO vienen
+//     de SQL: son objetos in-memory de las clases SinkBase serializados al
+//     vuelo. No hay columna que mapear, los nombres son los del campo TS.
 //   - Si en algún momento se normaliza todo a snake_case, hay que revisar
-//     `endpoints/audit-query.ts` y `views/audit/` simultáneamente.
+//     `endpoints/audit-query.ts`, `views/audit/`, `services/health.service.ts`
+//     y `views/health/` simultáneamente.
 
 // =============================================================================
 // /logs/query — listado de log_entries

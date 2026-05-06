@@ -20,7 +20,7 @@ const h = React.createElement;
 const LOGS_LIMIT = 100;
 
 export function SpanLogsList({ traceId }: { traceId: string }) {
-  const { data, loading, error } = useFetch(
+  const { data, loading, error, refetch } = useFetch(
     (signal) => queryLogs({ requestId: traceId, signal, limit: LOGS_LIMIT }),
     [traceId]
   );
@@ -37,9 +37,18 @@ export function SpanLogsList({ traceId }: { traceId: string }) {
           borderRadius: 6,
           fontFamily: 'var(--font-mono)',
           fontSize: 11,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          alignItems: 'flex-start',
         },
       },
-      `error cargando logs: ${error.message}`
+      h('div', null, `error cargando logs: ${error.message}`),
+      h(
+        'button',
+        { className: 'btn btn-secondary btn-sm', onClick: () => void refetch() },
+        'reintentar'
+      )
     );
   }
 

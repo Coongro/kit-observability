@@ -1,3 +1,10 @@
+// Botón inline que copia al portapapeles con feedback visual:
+//   - check verde (`done`) tras copiar exitosamente.
+//   - cruz roja (`failed`) cuando el browser rechaza el clipboard.
+//
+// Sin el feedback de fallo, un click sin reacción dejaba al usuario
+// pensando que había copiado cuando no.
+
 import { getHostReact } from '@coongro/plugin-sdk';
 
 import { copyToClipboard } from '../lib/clipboard.js';
@@ -16,32 +23,30 @@ export interface CopyBtnProps {
 }
 
 const COPY_FEEDBACK_MS = 1200;
+type FeedbackState = 'idle' | 'done' | 'failed';
 
-/**
- * Botón inline que copia al portapapeles. Muestra un check verde por
- * `COPY_FEEDBACK_MS` después de copiar como feedback visual.
- *
- * Acepta valores no-string para que el caller no tenga que stringify cada
- * vez (ej: copiar un sample JSON entero).
- */
 export function CopyBtn({ value, label = 'copiar', size = 12 }: CopyBtnProps) {
-  const [done, setDone] = useState(false);
+  const [state, setState] = useState<FeedbackState>('idle');
 
   const onClick = (e: { stopPropagation: () => void }): void => {
     e.stopPropagation();
     const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
     void copyToClipboard(text).then((ok) => {
-      if (!ok) return;
-      setDone(true);
-      setTimeout(() => setDone(false), COPY_FEEDBACK_MS);
+      setState(ok ? 'done' : 'failed');
+      setTimeout(() => setState('idle'), COPY_FEEDBACK_MS);
     });
   };
+
+  const color =
+    state === 'done' ? 'var(--teal-dk)' : state === 'failed' ? 'var(--red)' : 'var(--neutral-500)';
+  const iconName = state === 'done' ? 'check' : state === 'failed' ? 'close' : 'copy';
+  const title = state === 'failed' ? `${label} (falló — el browser rechazó el clipboard)` : label;
 
   return h(
     'button',
     {
       onClick,
-      title: label,
+      title,
       style: {
         display: 'inline-flex',
         alignItems: 'center',
@@ -51,10 +56,10 @@ export function CopyBtn({ value, label = 'copiar', size = 12 }: CopyBtnProps) {
         border: '0.5px solid transparent',
         borderRadius: 4,
         cursor: 'pointer',
-        color: done ? 'var(--teal-dk)' : 'var(--neutral-500)',
+        color,
         fontSize: 10,
         fontFamily: 'var(--font-sans)',
-        opacity: done ? 1 : 0.7,
+        opacity: state === 'idle' ? 0.7 : 1,
       },
       onMouseEnter: (e: { currentTarget: HTMLElement }) => {
         e.currentTarget.style.background = 'var(--neutral-200)';
@@ -62,9 +67,9 @@ export function CopyBtn({ value, label = 'copiar', size = 12 }: CopyBtnProps) {
       },
       onMouseLeave: (e: { currentTarget: HTMLElement }) => {
         e.currentTarget.style.background = 'transparent';
-        e.currentTarget.style.opacity = done ? '1' : '0.7';
+        e.currentTarget.style.opacity = state === 'idle' ? '0.7' : '1';
       },
     },
-    h(ObsIcon, { name: done ? 'check' : 'copy', size })
+    h(ObsIcon, { name: iconName, size })
   );
 }

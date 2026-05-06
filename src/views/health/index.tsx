@@ -30,6 +30,7 @@ import {
   deriveGlobalStatus,
   deriveInsertErrorsStatus,
   deriveQueueLagStatus,
+  worseStatus,
   type HealthStatus,
 } from '../_shared/lib/derive-health-status.js';
 import { absTime, relTime } from '../_shared/lib/format-time.js';
@@ -40,7 +41,7 @@ import { SelfIssuesTable } from './self-issues-table.js';
 
 const React = getHostReact();
 const h = React.createElement;
-const { useCallback } = React;
+const { useCallback, useEffect, useRef } = React;
 
 const POLL_INTERVAL_MS = 10_000;
 
@@ -51,9 +52,27 @@ export function HealthView() {
     refreshInterval: POLL_INTERVAL_MS,
   });
 
+  // `useFetch.refetch` nunca rejecta — el error se expone vía el state
+  // `error`. Mantenemos un ref sincronizado para que `onRecheck` pueda
+  // chequearlo post-refetch sin entrar en deps del useCallback.
+  const errorRef = useRef<Error | null>(error);
+  useEffect(() => {
+    errorRef.current = error;
+  }, [error]);
+
+  // Cache del último data válido. Si un tick del polling falla después
+  // de un load exitoso, conservamos el último valor visible — el dashboard
+  // no debe colapsar a "cartel de error" cuando ya tenía data.
+  const lastHealthRef = useRef(data);
+  useEffect(() => {
+    if (data !== null) lastHealthRef.current = data;
+  }, [data]);
+
   const onRecheck = useCallback(() => {
     void refetch().then(() => {
-      toast.info('Salud actualizada', '');
+      if (errorRef.current === null) {
+        toast.info('Salud actualizada', '');
+      }
     });
   }, [refetch, toast]);
 
@@ -88,19 +107,26 @@ export function HealthView() {
         ),
       ],
     }),
-    error
+    error && lastHealthRef.current === null
       ? h(InlineError, { error, onRetry: () => void refetch() })
-      : h(HealthBody, { health: data, loading, onRecheck })
+      : h(HealthBody, {
+          health: data ?? lastHealthRef.current,
+          stale: error !== null,
+          loading,
+          onRecheck,
+        })
   );
 }
 
 interface BodyProps {
   health: { dbSink: SinkHealth; spanSink: SinkHealth } | null;
+  /** True cuando el último tick falló y mostramos el último valor cacheado. */
+  stale: boolean;
   loading: boolean;
   onRecheck: () => void;
 }
 
-function HealthBody({ health, loading, onRecheck }: BodyProps) {
+function HealthBody({ health, stale, loading, onRecheck }: BodyProps) {
   if (health === null) {
     return h(
       'div',
@@ -127,6 +153,7 @@ function HealthBody({ health, loading, onRecheck }: BodyProps) {
   return h(
     React.Fragment,
     null,
+    stale ? h(StaleBanner) : null,
     h(
       'div',
       { style: { padding: '18px 28px 0' } },
@@ -170,8 +197,11 @@ function MetricGrid({ health }: MetricGridProps) {
     h(MetricCard, {
       title: 'Particiones',
       status: 'ok',
+      // El ticket de seguimiento del cron de retention se documenta en
+      // CLAUDE.md/Plane; el texto user-facing no lo menciona porque rota
+      // cada vez que se cierra/reasigna.
       comingSoon: true,
-      comingSoonText: 'Pendiente de cron de retention (COONG-119) — chequea pg_partman + huecos.',
+      comingSoonText: 'Pendiente de cron de retention — chequea pg_partman + huecos.',
     })
   );
 }
@@ -184,9 +214,10 @@ function MetricGrid({ health }: MetricGridProps) {
 // =============================================================================
 
 function QueueLagCard({ health }: MetricGridProps) {
-  const dbStatus = deriveQueueLagStatus(health.dbSink.queueLag);
-  const spanStatus = deriveQueueLagStatus(health.spanSink.queueLag);
-  const status: HealthStatus = dbStatus === 'warn' || spanStatus === 'warn' ? 'warn' : 'ok';
+  const status: HealthStatus = worseStatus(
+    deriveQueueLagStatus(health.dbSink.queueLag),
+    deriveQueueLagStatus(health.spanSink.queueLag)
+  );
   const total = health.dbSink.queueLag + health.spanSink.queueLag;
   return h(MetricCard, {
     title: 'Lag de queue',
@@ -203,14 +234,10 @@ function QueueLagCard({ health }: MetricGridProps) {
 }
 
 function FailsafeCard({ health }: MetricGridProps) {
-  const dbStatus = deriveFailsafeStatus(health.dbSink);
-  const spanStatus = deriveFailsafeStatus(health.spanSink);
-  const status: HealthStatus =
-    dbStatus === 'error' || spanStatus === 'error'
-      ? 'error'
-      : dbStatus === 'warn' || spanStatus === 'warn'
-        ? 'warn'
-        : 'ok';
+  const status: HealthStatus = worseStatus(
+    deriveFailsafeStatus(health.dbSink),
+    deriveFailsafeStatus(health.spanSink)
+  );
   const lost = health.dbSink.permanentlyLost + health.spanSink.permanentlyLost;
   const diverted = health.dbSink.divertedToFailsafe + health.spanSink.divertedToFailsafe;
   return h(MetricCard, {
@@ -239,14 +266,10 @@ function FailsafeCard({ health }: MetricGridProps) {
 }
 
 function InsertErrorsCard({ health }: MetricGridProps) {
-  const dbStatus = deriveInsertErrorsStatus(health.dbSink);
-  const spanStatus = deriveInsertErrorsStatus(health.spanSink);
-  const status: HealthStatus =
-    dbStatus === 'error' || spanStatus === 'error'
-      ? 'error'
-      : dbStatus === 'warn' || spanStatus === 'warn'
-        ? 'warn'
-        : 'ok';
+  const status: HealthStatus = worseStatus(
+    deriveInsertErrorsStatus(health.dbSink),
+    deriveInsertErrorsStatus(health.spanSink)
+  );
   const total = health.dbSink.insertFailures + health.spanSink.insertFailures;
   return h(MetricCard, {
     title: 'Errores de insert',
@@ -293,6 +316,23 @@ function LastFlushCard({ health }: MetricGridProps) {
 
 interface SinkBreakdownProps {
   rows: { label: string; value: string; tone?: 'neutral' | 'error' }[];
+}
+
+function StaleBanner() {
+  return h(
+    'div',
+    {
+      style: {
+        padding: '6px 22px',
+        background: 'var(--gold-soft)',
+        borderBottom: '0.5px solid var(--gold-dk)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 11,
+        color: 'var(--gold-deep)',
+      },
+    },
+    'datos potencialmente desactualizados — el último refresh falló. Mostrando último valor conocido.'
+  );
 }
 
 function SinkBreakdown({ rows }: SinkBreakdownProps) {

@@ -5,17 +5,10 @@
 //   2. Selector inicial con lista de recientes y input grande, cuando se
 //      entra al menú sin params.
 //
-// Decisiones del port:
-//
-//   - Header rico con tenant chip, contadores de spans/errores, "Open in
-//     Claude Code" (copia comando MCP) y "Copy as JSON" del trace.
-//   - Filtros del waterfall (hide < N ms, only errors, expand/collapse
-//     all) — la lógica vive en `lib/build-tree.ts`, el view solo encolla
-//     handlers.
-//   - SpanDetail como Drawer slide-in lateral. El drawer también muestra
-//     los log_entries del mismo request (mismo trace_id en log_entries).
-//   - Auto-refresh OFF — el trace es snapshot; refresh manual desde el
-//     header.
+// Auto-refresh OFF — el trace es una snapshot. Re-fetch manual desde el
+// header. La lógica del waterfall (árbol, filtros, depth, offsets) vive
+// en `lib/build-tree.ts` para que sea pura y testeable; este archivo es
+// composición + orquestación de state.
 
 import { getHostReact, usePlugin } from '@coongro/plugin-sdk';
 
@@ -32,6 +25,7 @@ import {
   collectExpandableIds,
   DEFAULT_WATERFALL_FILTERS,
   type SpanNode,
+  type TraceTree,
   type WaterfallFilters,
 } from './lib/build-tree.js';
 import { SpanDetail } from './span-detail.js';
@@ -72,12 +66,12 @@ export function TraceView() {
     [traceId]
   );
 
-  const fullTree = useMemo(() => {
+  const fullTree = useMemo<TraceTree | null>(() => {
     if (data === null || data.spans.length === 0) return null;
     return buildTraceTree(data.spans);
   }, [data]);
 
-  const filteredTree = useMemo(() => {
+  const filteredTree = useMemo<TraceTree | null>(() => {
     if (fullTree === null) return null;
     return applyFilters(fullTree, filters);
   }, [fullTree, filters]);
@@ -87,6 +81,8 @@ export function TraceView() {
     return findNode(filteredTree.roots, selectedSpanId);
   }, [filteredTree, selectedSpanId]);
 
+  // Reset de filters/collapsed al cambiar de trace — los filtros del
+  // trace anterior raramente aplican al nuevo.
   const onSelectTrace = useCallback((next: string) => {
     setTraceId(next);
     setSelectedSpanId(null);
@@ -155,8 +151,8 @@ export function TraceView() {
 
 interface LoadedTraceProps {
   data: TraceQueryResult | null;
-  fullTree: ReturnType<typeof buildTraceTree> | null;
-  filteredTree: ReturnType<typeof buildTraceTree> | null;
+  fullTree: TraceTree | null;
+  filteredTree: TraceTree | null;
   loading: boolean;
   error: Error | null;
   filters: WaterfallFilters;
@@ -196,11 +192,17 @@ function LoadedTrace({
     return h('div', { style: { padding: 22 } }, h(InlineError, { error, onRetry: onRefresh }));
   }
 
-  if (data === null || fullTree === null) {
-    return h(LoadingOrEmpty, { loading, traceId });
+  if (data === null) {
+    return h(LoadingState, { loading });
   }
 
-  const visibleCount = filteredTree?.totalSpans ?? 0;
+  if (data.spans.length === 0 || fullTree === null) {
+    // El backend devuelve `count=0, spans=[]` tanto cuando el trace_id no
+    // existe como cuando los spans expiraron por retention. Sin distinguir,
+    // el operador no sabe qué pasó. El backend hoy no devuelve 404, así
+    // que mostramos un mensaje accionable client-side.
+    return h(NotFoundState, { traceId, onClear });
+  }
 
   return h(
     React.Fragment,
@@ -217,13 +219,13 @@ function LoadedTrace({
       setFilters,
       onExpandAll,
       onCollapseAll,
-      visibleCount,
-      totalCount: fullTree.totalSpans,
+      visibleCount: filteredTree?.visibleSpanCount ?? 0,
+      totalCount: fullTree.originalSpanCount,
     }),
     h(
       'div',
       { style: { flex: 1, minHeight: 0, overflow: 'auto', padding: '18px 22px' } },
-      filteredTree !== null && filteredTree.totalSpans > 0
+      filteredTree !== null && filteredTree.visibleSpanCount > 0
         ? h(WaterfallChart, {
             tree: filteredTree,
             selectedSpanId,
@@ -236,8 +238,8 @@ function LoadedTrace({
           })
     ),
     h(ResultsBar, {
-      count: visibleCount,
-      totalCount: fullTree.totalSpans,
+      count: filteredTree?.visibleSpanCount ?? 0,
+      totalCount: fullTree.originalSpanCount,
       entity: 'spans',
       middle:
         data.truncated === true
@@ -265,7 +267,7 @@ function LoadedTrace({
   );
 }
 
-function LoadingOrEmpty({ loading, traceId }: { loading: boolean; traceId: string }) {
+function LoadingState({ loading }: { loading: boolean }) {
   return h(
     'div',
     {
@@ -279,7 +281,49 @@ function LoadingOrEmpty({ loading, traceId }: { loading: boolean; traceId: strin
         fontSize: 13,
       },
     },
-    loading ? 'cargando spans…' : `no hay spans para trace_id "${traceId}".`
+    loading ? 'cargando spans…' : ''
+  );
+}
+
+function NotFoundState({ traceId, onClear }: { traceId: string; onClear: () => void }) {
+  return h(
+    'div',
+    {
+      style: {
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 14,
+        padding: '60px 22px',
+        textAlign: 'center',
+      },
+    },
+    h(
+      'div',
+      {
+        style: { fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--neutral-950)' },
+      },
+      'No encontramos spans para este trace_id.'
+    ),
+    h(
+      'div',
+      {
+        style: {
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          color: 'var(--neutral-500)',
+          maxWidth: 520,
+        },
+      },
+      `"${traceId}" no existe en log_spans, o sus spans expiraron por retention. Si el request_id existe en log_entries, podés verlo desde Stream.`
+    ),
+    h(
+      'button',
+      { className: 'btn btn-secondary btn-sm', onClick: onClear, style: { marginTop: 6 } },
+      'volver al selector'
+    )
   );
 }
 
@@ -312,7 +356,7 @@ function readTraceIdFromParams(params: unknown): string | null {
   return trimmed.length === 0 ? null : trimmed;
 }
 
-function findNode(roots: SpanNode[], spanId: string): SpanNode | null {
+function findNode(roots: ReadonlyArray<SpanNode>, spanId: string): SpanNode | null {
   for (const root of roots) {
     if (root.span.span_id === spanId) return root;
     const inChildren = findNode(root.children, spanId);

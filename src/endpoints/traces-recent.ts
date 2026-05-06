@@ -14,7 +14,10 @@ import { getRuntimeState } from '../runtime/state.js';
  */
 export async function listRecentTracesEndpoint(context: HttpEndpointContext): Promise<unknown> {
   const limitRaw = context.query['limit'];
-  const limit = typeof limitRaw === 'string' && limitRaw.length > 0 ? Number(limitRaw) : undefined;
+  // `Number('abc')` devuelve NaN, que pasaría por el clamp del repo y haría
+  // que la query corra con `LIMIT NaN`. Filtramos a número finito explícito.
+  const parsed = typeof limitRaw === 'string' && limitRaw.length > 0 ? Number(limitRaw) : undefined;
+  const limit = parsed !== undefined && Number.isFinite(parsed) ? parsed : undefined;
 
   const state = getRuntimeState();
   return listRecentTraces(state.systemDb.raw, limit);

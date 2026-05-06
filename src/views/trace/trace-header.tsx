@@ -18,6 +18,7 @@ import { shortenId } from '../_shared/lib/format-id.js';
 import { absTime, formatDuration } from '../_shared/lib/format-time.js';
 
 import type { TraceTree } from './lib/build-tree.js';
+import { OTEL_STATUS_CODE_ERROR } from './lib/otel.js';
 
 const React = getHostReact();
 const h = React.createElement;
@@ -86,7 +87,7 @@ function TraceMeta({
       h(TraceIdChip, { traceId: data.trace_id }),
       h(SeparatorDot),
       h(Stat, {
-        value: tree.totalSpans.toLocaleString('es-AR'),
+        value: tree.originalSpanCount.toLocaleString('es-AR'),
         label: 'spans',
       }),
       h(SeparatorDot),
@@ -295,7 +296,7 @@ function countErrors(tree: TraceTree): number {
   let n = 0;
   function walk(nodes: TraceTree['roots']): void {
     for (const node of nodes) {
-      if (node.span.status_code === 2) n += 1;
+      if (node.span.status_code === OTEL_STATUS_CODE_ERROR) n += 1;
       walk(node.children);
     }
   }

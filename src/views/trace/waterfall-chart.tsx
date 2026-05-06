@@ -11,12 +11,12 @@ import { getHostReact } from '@coongro/plugin-sdk';
 import { formatDuration } from '../_shared/lib/format-time.js';
 
 import { type SpanNode, type TraceTree, flattenTree } from './lib/build-tree.js';
+import { WATERFALL_LABEL_COL_WIDTH as LABEL_COL_WIDTH } from './lib/waterfall-layout.js';
 import { SpanRow } from './span-row.js';
 
 const React = getHostReact();
 const h = React.createElement;
 
-const LABEL_COL_WIDTH = 320;
 const TICK_COUNT = 4;
 
 export interface WaterfallChartProps {
@@ -113,8 +113,18 @@ function TimeAxisHeader({ traceDurationNs }: { traceDurationNs: number }) {
           marginRight: 16,
         },
       },
-      ...ticks.map((tick, idx) =>
-        h(
+      ...ticks.map((tick, idx) => {
+        // El primer tick se ancla al borde izquierdo y el último al derecho;
+        // el resto se centra. Sin esto las labels se cortan en los extremos.
+        let transform: string;
+        if (idx === 0) {
+          transform = 'none';
+        } else if (idx === ticks.length - 1) {
+          transform = 'translateX(-100%)';
+        } else {
+          transform = 'translateX(-50%)';
+        }
+        return h(
           'span',
           {
             key: `tick-${idx}`,
@@ -122,20 +132,15 @@ function TimeAxisHeader({ traceDurationNs }: { traceDurationNs: number }) {
               position: 'absolute',
               top: 6,
               left: `${(tick.fraction * 100).toFixed(2)}%`,
-              transform:
-                idx === 0
-                  ? 'none'
-                  : idx === ticks.length - 1
-                    ? 'translateX(-100%)'
-                    : 'translateX(-50%)',
+              transform,
               fontFamily: 'var(--font-mono)',
               fontSize: 10,
               color: 'var(--neutral-500)',
             },
           },
           tick.label
-        )
-      )
+        );
+      })
     )
   );
 }

@@ -14,16 +14,11 @@ import { CopyBtn } from '../_shared/components/copy-btn.js';
 import { JsonTree } from '../_shared/components/json-tree.js';
 import { absTime, formatDuration } from '../_shared/lib/format-time.js';
 
+import { OTEL_STATUS_CODE_LABEL } from './lib/otel.js';
 import { SpanLogsList } from './span-logs-list.js';
 
 const React = getHostReact();
 const h = React.createElement;
-
-const OTEL_STATUS_CODE_LABEL: Record<number, string> = {
-  0: 'UNSET',
-  1: 'OK',
-  2: 'ERROR',
-};
 
 export interface SpanDetailProps {
   span: SpanRecord;
@@ -180,8 +175,12 @@ function SpanFields({
 }
 
 function SpanJsonSection({ title, value }: { title: string; value: unknown }) {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'object' && Object.keys(value).length === 0) return null;
+  // attributes/resource/events vienen tipados como `unknown` desde wire.ts:
+  // si una fila viniera malformada (string en lugar de objeto) y se castease
+  // directo a Record, JsonTree iteraría caracteres y crashearía. Filtramos
+  // todo lo que no sea un plain object con keys.
+  if (value === null || typeof value !== 'object') return null;
+  if (Object.keys(value).length === 0) return null;
   return h(
     'div',
     null,
