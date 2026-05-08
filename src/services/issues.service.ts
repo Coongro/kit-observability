@@ -19,7 +19,12 @@ export {
 
 export interface IssueActor {
   tenantId?: string;
-  actorId?: string;
+  /**
+   * Id del actor. Aceptamos `string | number` para reflejar `HttpEndpointUser.id`
+   * (WordPress user_id es numeric hoy). El AuditLog se encarga de coercionar
+   * a UUID-o-null y preservar el valor original en metadata si hace falta.
+   */
+  actorId?: string | number;
 }
 
 export async function patchIssueStatus(

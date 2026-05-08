@@ -7,8 +7,8 @@ import { getRuntimeState } from '../runtime/state.js';
 /**
  * GET /plugins/kit-observability/audit
  *
- * Query params: tenant_id, actor_id, action, entity_type, entity_id, from (ISO),
- * to (ISO), limit.
+ * Query params: tenant_id, actor_id, action, entity_type, entity_id,
+ * request_id, from (ISO), to (ISO), limit.
  *
  * Devuelve eventos de `audit_events` ordenados por timestamp DESC.
  * Default limit 100, máximo 1000 (clamp en `AuditLog.query`).
@@ -45,6 +45,7 @@ export async function queryAuditEndpoint(context: HttpEndpointContext): Promise<
     action: parseOptionalString(query['action']),
     entityType: parseOptionalString(query['entity_type']),
     entityId: parseOptionalString(query['entity_id']),
+    requestId: parseOptionalString(query['request_id']),
     from,
     to,
     limit: parseLimit(query['limit'], 1000, 100),

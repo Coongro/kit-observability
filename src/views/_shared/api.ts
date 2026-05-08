@@ -155,7 +155,12 @@ function buildQuery(params: Record<string, string | number | undefined | null>):
 // =============================================================================
 
 export interface QueryLogsParams {
-  level?: number;
+  /**
+   * Niveles a filtrar. Vacío/undefined = todos. El backend usa `IN(...)`
+   * para que un caller pueda pedir "warn + error" en una sola query sin
+   * fetchear todo y filtrar en cliente.
+   */
+  levels?: readonly number[];
   source?: string;
   tenantId?: string;
   /** Filtra por request_id exacto. Lo usa el "seguir request_id" del Stream view. */
@@ -170,7 +175,8 @@ export interface QueryLogsParams {
 
 export function queryLogs(params: QueryLogsParams = {}): Promise<WireQueryLogsResult> {
   const qs = buildQuery({
-    level: params.level,
+    levels:
+      params.levels !== undefined && params.levels.length > 0 ? params.levels.join(',') : undefined,
     source: params.source,
     tenant_id: params.tenantId,
     request_id: params.requestId,
@@ -184,8 +190,9 @@ export function queryLogs(params: QueryLogsParams = {}): Promise<WireQueryLogsRe
 }
 
 // =============================================================================
-// 2) POST /logs — ingestion de errores del frontend (auth: 'none')
+// 2) POST /logs — ingestion de errores del frontend (auth: 'jwt')
 // =============================================================================
+// El server deriva tenant_id y actor_id del JWT — el cliente no los manda.
 
 export interface IngestLogInput {
   message: string;
@@ -193,18 +200,16 @@ export interface IngestLogInput {
   stack?: string;
   url?: string;
   userAgent?: string;
-  tenantId?: string;
   signal?: AbortSignal;
 }
 
 export function ingestLog(input: IngestLogInput): Promise<WireIngestLogResponse> {
-  const { signal, userAgent, tenantId, ...rest } = input;
+  const { signal, userAgent, ...rest } = input;
   return request<WireIngestLogResponse>('/logs', {
     method: 'POST',
     body: {
       ...rest,
       user_agent: userAgent,
-      tenant_id: tenantId,
     },
     signal,
   });
@@ -215,7 +220,8 @@ export function ingestLog(input: IngestLogInput): Promise<WireIngestLogResponse>
 // =============================================================================
 
 export interface QueryIssuesParams {
-  level?: number;
+  /** Niveles a incluir (IN). Vacío/undefined = todos. */
+  levels?: readonly number[];
   /** Lista de statuses a incluir. Se serializa como CSV en el query string. */
   status?: WireIssueStatus[];
   tenantId?: string;
@@ -230,7 +236,8 @@ export interface QueryIssuesParams {
 
 export function queryIssues(params: QueryIssuesParams = {}): Promise<WireQueryIssuesResult> {
   const qs = buildQuery({
-    level: params.level,
+    levels:
+      params.levels !== undefined && params.levels.length > 0 ? params.levels.join(',') : undefined,
     status: params.status && params.status.length > 0 ? params.status.join(',') : undefined,
     tenant_id: params.tenantId,
     source: params.source,

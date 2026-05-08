@@ -5,9 +5,11 @@ import { CopyBtn } from '../_shared/components/copy-btn.js';
 import { ObsIcon } from '../_shared/components/icons.js';
 import { JsonTree } from '../_shared/components/json-tree.js';
 import { LevelBadge } from '../_shared/components/level-badge.js';
+import { copyToClipboard } from '../_shared/lib/clipboard.js';
 import { shortenId } from '../_shared/lib/format-id.js';
 import { absTime } from '../_shared/lib/format-time.js';
 import { LEVEL } from '../_shared/lib/levels.js';
+import { openIssue } from '../_shared/lib/open-issue.js';
 import { openTrace } from '../_shared/lib/open-trace.js';
 
 const React = getHostReact();
@@ -28,9 +30,17 @@ export interface StreamRowProps {
  * propaga al hero filter del view (no es un toggle local).
  */
 export function StreamRow({ entry, expanded, onToggle, onFollowRequest }: StreamRowProps) {
-  const { views } = usePlugin();
+  const { views, toast } = usePlugin();
   const [hover, setHover] = useState(false);
   const isError = entry.level >= LEVEL.ERROR;
+
+  const onCopyJson = (): void => {
+    void (async () => {
+      const ok = await copyToClipboard(JSON.stringify(buildExpandedJson(entry), null, 2));
+      if (ok) toast.success('Entry copiado como JSON', '');
+      else toast.error('No se pudo copiar al portapapeles', '');
+    })();
+  };
 
   return h(
     React.Fragment,
@@ -222,8 +232,80 @@ export function StreamRow({ entry, expanded, onToggle, onFollowRequest }: Stream
           h(
             'td',
             { colSpan: 8, style: { padding: '8px 14px 12px 38px' } },
-            h(JsonTree, { obj: buildExpandedJson(entry) })
+            h(JsonTree, { obj: buildExpandedJson(entry) }),
+            h(ExpandedActions, {
+              entry,
+              onCopyJson,
+              onFollowRequest,
+              onOpenTrace:
+                entry.request_id !== null ? () => openTrace(views, entry.request_id) : null,
+              onOpenIssue:
+                entry.fingerprint !== null ? () => openIssue(views, entry.fingerprint) : null,
+            })
           )
+        )
+      : null
+  );
+}
+
+function ExpandedActions({
+  entry,
+  onCopyJson,
+  onFollowRequest,
+  onOpenTrace,
+  onOpenIssue,
+}: {
+  entry: LogEntry;
+  onCopyJson: () => void;
+  onFollowRequest: () => void;
+  onOpenTrace: (() => void) | null;
+  onOpenIssue: (() => void) | null;
+}) {
+  return h(
+    'div',
+    {
+      style: { display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' },
+    },
+    h(
+      'button',
+      { className: 'btn btn-dark btn-sm', onClick: onCopyJson },
+      h(ObsIcon, { name: 'copy', size: 12 }),
+      h('span', null, 'Copiar como JSON')
+    ),
+    entry.request_id !== null
+      ? h(
+          'button',
+          {
+            className: 'btn btn-secondary btn-sm',
+            onClick: onFollowRequest,
+            title: 'filtrar log_entries por este request_id',
+          },
+          h(ObsIcon, { name: 'link', size: 12 }),
+          h('span', null, 'Ver cadena completa del request_id')
+        )
+      : null,
+    onOpenTrace !== null
+      ? h(
+          'button',
+          {
+            className: 'btn btn-dark btn-sm',
+            onClick: onOpenTrace,
+            title: 'abrir el waterfall del request',
+          },
+          h(ObsIcon, { name: 'activity', size: 12 }),
+          h('span', null, 'Abrir trace')
+        )
+      : null,
+    onOpenIssue !== null && entry.fingerprint !== null
+      ? h(
+          'button',
+          {
+            className: 'btn btn-secondary btn-sm',
+            onClick: onOpenIssue,
+            title: 'abrir el issue agrupado por este fingerprint',
+          },
+          h(ObsIcon, { name: 'bug', size: 12 }),
+          h('span', null, `Abrir issue ${entry.fingerprint.slice(0, 8)}`)
         )
       : null
   );

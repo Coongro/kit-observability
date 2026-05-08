@@ -48,23 +48,36 @@ const STATUS_LABEL: Record<IssueStatus, string> = {
 };
 
 export function IssuesView() {
-  const { toast } = usePlugin();
+  const { toast, views } = usePlugin();
   const [filters, setFilters] = useState<IssuesFilters>(DEFAULT_FILTERS);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(() =>
+    readFingerprintFromParams(views.params)
+  );
   const [fullPage, setFullPage] = useState(false);
 
+  // Si los params del view cambian (ej: navegación desde Stream con un
+  // fingerprint nuevo), sincronizamos la selección. Comparación con
+  // `selected` evita un loop si el usuario cierra el detail manualmente.
+  React.useEffect(() => {
+    const fromParams = readFingerprintFromParams(views.params);
+    if (fromParams !== null && fromParams !== selected) {
+      setSelected(fromParams);
+    }
+  }, [views.params, selected]);
+
   // Memoizamos los args del fetch para que el cambio de filters dispare
-  // refetch solo cuando los valores que mandamos al backend cambian. El
-  // filtro de levels NO va al backend hoy (la API recibe level único, no
-  // lista) — lo aplicamos en cliente abajo.
+  // refetch solo cuando los valores que mandamos al backend cambian. Los
+  // levels van al backend via `levels` (CSV → IN). 5 levels = todos
+  // = sin filtro.
   const fetchArgs = useMemo(
     () => ({
+      levels: filters.levels.length > 0 && filters.levels.length < 5 ? filters.levels : undefined,
       status: filters.statuses,
       tenantId: filters.tenantId ?? undefined,
       source: filters.source ?? undefined,
       from: RANGE_TO_FROM[filters.range](),
     }),
-    [filters.statuses, filters.tenantId, filters.source, filters.range]
+    [filters.levels, filters.statuses, filters.tenantId, filters.source, filters.range]
   );
 
   const { data, loading, error, refetch } = useFetch(
@@ -72,12 +85,7 @@ export function IssuesView() {
     [fetchArgs]
   );
 
-  const issues = useMemo<LogIssue[]>(() => {
-    const all = data?.rows ?? [];
-    if (filters.levels.length === 0) return all;
-    const allowed = new Set<number>(filters.levels);
-    return all.filter((i) => allowed.has(i.level));
-  }, [data, filters.levels]);
+  const issues = useMemo<LogIssue[]>(() => data?.rows ?? [], [data]);
 
   const openCount = useMemo(() => issues.filter((i) => i.status === 'open').length, [issues]);
 
@@ -355,4 +363,17 @@ function Th({
 
 function isoAgo(ms: number): string {
   return new Date(Date.now() - ms).toISOString();
+}
+
+/**
+ * Extrae `fingerprint` de los params del view. Usado para que `openIssue()`
+ * desde otras vistas (Stream "Abrir issue X") aterrice con el issue
+ * preseleccionado en lugar de la lista vacía.
+ */
+function readFingerprintFromParams(params: unknown): string | null {
+  if (params === null || typeof params !== 'object') return null;
+  const value = (params as Record<string, unknown>).fingerprint;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
 }

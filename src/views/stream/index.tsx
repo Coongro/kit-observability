@@ -27,7 +27,7 @@ import { StreamRow } from './stream-row.js';
 
 const React = getHostReact();
 const h = React.createElement;
-const { useCallback, useMemo, useState } = React;
+const { useCallback, useEffect, useMemo, useState } = React;
 
 const POLL_INTERVAL_MS = 2000;
 const STREAM_LIMIT = 200;
@@ -40,26 +40,53 @@ const RANGE_TO_FROM: Record<StreamFilters['range'], () => string | undefined> = 
 };
 
 export function StreamView() {
-  const { toast } = usePlugin();
-  const [filters, setFilters] = useState<StreamFilters>(DEFAULT_STREAM_FILTERS);
-  const [requestIdFilter, setRequestIdFilter] = useState<string | null>(null);
+  const { toast, views } = usePlugin();
+  const [filters, setFilters] = useState<StreamFilters>(() =>
+    applyParamsToFilters(DEFAULT_STREAM_FILTERS, views.params)
+  );
+  const [requestIdFilter, setRequestIdFilter] = useState<string | null>(() =>
+    readStringParam(views.params, 'requestId')
+  );
+  // Ventana custom (override del chip de range). Si está seteada, gana
+  // contra `RANGE_TO_FROM[filters.range]()`. Se usa cuando un caller
+  // (ej: Issues "Ver en Stream") quiere acotar a un timeframe específico
+  // alrededor de un evento. El chip de range sigue clickeable para
+  // limpiarla.
+  const [customRange, setCustomRange] = useState<{ from: string; to: string } | null>(() =>
+    readCustomRangeFromParams(views.params)
+  );
   const [paused, setPaused] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
+  // Sync con cambios de params posteriores (navegación entre issues sin
+  // recarga). Solo aplicamos cuando los params traen algún filtro real —
+  // así no resetamos el estado del usuario cuando params queda vacío al
+  // cerrar el detail de otra view.
+  useEffect(() => {
+    if (!hasAnyFilterParam(views.params)) return;
+    setFilters((prev) => applyParamsToFilters(prev, views.params));
+    const rid = readStringParam(views.params, 'requestId');
+    if (rid !== null) setRequestIdFilter(rid);
+    const cr = readCustomRangeFromParams(views.params);
+    if (cr !== null) setCustomRange(cr);
+  }, [views.params]);
+
   const fetchArgs = useMemo(
     () => ({
-      // El backend hoy acepta level único, no lista. Si todos los niveles
-      // están seleccionados (default), no mandamos filtro; si hay un solo
-      // nivel seleccionado, lo mandamos. Si hay varios pero no todos,
-      // filtramos client-side (caso poco común en Stream).
-      level: filters.levels.length === 1 ? filters.levels[0] : undefined,
+      // Mandamos los niveles seleccionados como array al backend (que usa
+      // `IN(...)`). Cuando están los 5 niveles default → undefined (no
+      // filtro). Cuando hay 1+ niveles parciales → array. Esto reemplaza el
+      // filter-client-side que rompía cuando los logs recientes no incluían
+      // los niveles pedidos (limit 200 saturado por info/debug ruidosos).
+      levels: filters.levels.length > 0 && filters.levels.length < 5 ? filters.levels : undefined,
       tenantId: filters.tenantId ?? undefined,
       source: filters.source ?? undefined,
       requestId: requestIdFilter ?? undefined,
       q: filters.search ?? undefined,
-      from: RANGE_TO_FROM[filters.range](),
+      from: customRange?.from ?? RANGE_TO_FROM[filters.range](),
+      to: customRange?.to,
     }),
-    [filters, requestIdFilter]
+    [filters, requestIdFilter, customRange]
   );
 
   const { data, loading, error, refetch } = useFetch(
@@ -68,15 +95,7 @@ export function StreamView() {
     { refreshInterval: paused ? undefined : POLL_INTERVAL_MS }
   );
 
-  const entries = useMemo<LogEntry[]>(() => {
-    const all = data?.entries ?? [];
-    // Filtro client-side de niveles cuando el caller seleccionó un subset
-    // (la API no acepta level array todavía). Default = todos los niveles
-    // → all-pass.
-    if (filters.levels.length === 0 || filters.levels.length === 5) return all;
-    const allowed = new Set<number>(filters.levels);
-    return all.filter((e) => allowed.has(e.level));
-  }, [data, filters.levels]);
+  const entries = useMemo<LogEntry[]>(() => data?.entries ?? [], [data]);
 
   const toggleExpanded = useCallback((id: string) => {
     setExpanded((prev) => {
@@ -167,6 +186,9 @@ export function StreamView() {
       tone: 'gold',
     }),
     h(StreamFilterBar, { filters, setFilters }),
+    customRange !== null
+      ? h(CustomRangeIndicator, { range: customRange, onClear: () => setCustomRange(null) })
+      : null,
     h(
       'div',
       { style: { flex: 1, minHeight: 0, overflow: 'auto', background: 'var(--white)' } },
@@ -324,4 +346,127 @@ function StreamTable({ entries, loading, expanded, onToggle, onFollowRequest }: 
 
 function isoAgo(ms: number): string {
   return new Date(Date.now() - ms).toISOString();
+}
+
+/**
+ * Banda informativa que aparece cuando hay una ventana custom activa
+ * (usuario navegó desde Issues "Ver en Stream" con un timeframe específico).
+ * El chip de range del filter bar queda en su valor default pero no se
+ * aplica — esta banda lo aclara y ofrece volver al default con un click.
+ */
+function CustomRangeIndicator({
+  range,
+  onClear,
+}: {
+  range: { from: string; to: string };
+  onClear: () => void;
+}) {
+  return h(
+    'div',
+    {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '8px 22px',
+        background: 'var(--sky-soft)',
+        borderBottom: '0.5px solid var(--sky-lt)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 11,
+        color: 'var(--sky-deep)',
+      },
+    },
+    h(
+      'span',
+      { style: { fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' } },
+      'rango custom'
+    ),
+    h('span', null, `${formatRangeBound(range.from)} → ${formatRangeBound(range.to)}`),
+    h('div', { style: { flex: 1 } }),
+    h(
+      'button',
+      {
+        onClick: onClear,
+        title: 'limpiar rango custom y volver al chip de range',
+        style: {
+          height: 22,
+          padding: '0 8px',
+          background: 'transparent',
+          border: '0.5px solid var(--sky-dk)',
+          borderRadius: 4,
+          color: 'var(--sky-deep)',
+          cursor: 'pointer',
+          fontFamily: 'var(--font-sans)',
+          fontSize: 11,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+        },
+      },
+      'limpiar'
+    )
+  );
+}
+
+function formatRangeBound(iso: string): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return iso;
+  const d = new Date(ms);
+  // HH:MM:SS local — el rango siempre es chico (segundos/minutos), día
+  // completo no aporta. Si la ventana cruza días el caller puede ver el
+  // ISO completo en el title del chip.
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/**
+ * Lee un string trimeado de los params del view, o null si no está. Usado
+ * para que `openStream({ source, q, ... })` desde otras vistas pueda
+ * pre-cargar la barra de filtros del Stream.
+ */
+function readStringParam(params: unknown, key: string): string | null {
+  if (params === null || typeof params !== 'object') return null;
+  const value = (params as Record<string, unknown>)[key];
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+function hasAnyFilterParam(params: unknown): boolean {
+  return (
+    readStringParam(params, 'source') !== null ||
+    readStringParam(params, 'requestId') !== null ||
+    readStringParam(params, 'tenantId') !== null ||
+    readStringParam(params, 'q') !== null ||
+    readStringParam(params, 'from') !== null ||
+    readStringParam(params, 'to') !== null
+  );
+}
+
+/**
+ * Lee `from`/`to` ISO de los params como una ventana custom. Necesita los
+ * dos valores presentes — un solo extremo no tiene semántica clara y
+ * podría confundirse con el chip de range. Devuelve null si falta alguno.
+ */
+function readCustomRangeFromParams(params: unknown): { from: string; to: string } | null {
+  const from = readStringParam(params, 'from');
+  const to = readStringParam(params, 'to');
+  if (from === null || to === null) return null;
+  return { from, to };
+}
+
+/**
+ * Merge de params → StreamFilters. NO toca campos que no vinieron en params
+ * — un caller que solo manda `source` no debería resetear `range`/`levels`.
+ */
+function applyParamsToFilters(base: StreamFilters, params: unknown): StreamFilters {
+  const source = readStringParam(params, 'source');
+  const tenantId = readStringParam(params, 'tenantId');
+  const q = readStringParam(params, 'q');
+  return {
+    ...base,
+    source: source ?? base.source,
+    tenantId: tenantId ?? base.tenantId,
+    search: q ?? base.search,
+  };
 }

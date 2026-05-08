@@ -2,7 +2,6 @@ import type { Sql } from 'postgres';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditLog } from '../audit/index.js';
-import { runBootstrap } from '../bootstrap/run-bootstrap.js';
 import { clearRuntimeState, setRuntimeState } from '../runtime/state.js';
 import { AUDIT_EVENTS_TABLE } from '../schema/audit-events.js';
 import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
@@ -11,6 +10,7 @@ import {
   createTestSystemDatabase,
   getTestDbUrl,
   resetObservabilitySchema,
+  setupObservabilitySchema,
   silentLogger,
 } from '../test-utils/db.js';
 
@@ -54,7 +54,7 @@ describe.skipIf(skipIfNoDb)('queryAuditEndpoint (integration)', () => {
     const systemDb = createTestSystemDatabase(sql);
     audit = new AuditLog(systemDb, silentLogger);
     await resetObservabilitySchema(sql);
-    await runBootstrap(sql, silentLogger);
+    await setupObservabilitySchema(sql);
 
     setRuntimeState({
       systemDb,

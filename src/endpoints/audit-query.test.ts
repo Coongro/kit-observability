@@ -51,6 +51,7 @@ describe('queryAuditEndpoint', () => {
         action: 'issue.status_updated',
         entity_type: 'log_issue',
         entity_id: 'abc',
+        request_id: 'req-xyz-789',
       })
     );
     const args = lastQueryArgs();
@@ -60,6 +61,7 @@ describe('queryAuditEndpoint', () => {
       action: 'issue.status_updated',
       entityType: 'log_issue',
       entityId: 'abc',
+      requestId: 'req-xyz-789',
     });
   });
 

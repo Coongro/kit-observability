@@ -23,7 +23,8 @@ export async function updateIssueStatus(
 }
 
 export interface IssueQueryFilters {
-  level?: number;
+  /** Niveles a incluir (IN). Vacío/undefined = todos. */
+  levels?: number[];
   status?: IssueStatus | IssueStatus[];
   tenantId?: string;
   source?: string;
@@ -79,7 +80,7 @@ export async function queryIssues(raw: Sql, filters: IssueQueryFilters): Promise
         : [filters.status];
 
   const { whereClause, params, nextIdx } = where()
-    .eq('level', filters.level)
+    .inList('level', filters.levels)
     .inList('status', statuses)
     .eq('tenant_id', filters.tenantId, { cast: 'uuid' })
     .eq('source', filters.source)

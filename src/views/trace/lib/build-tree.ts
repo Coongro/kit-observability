@@ -208,11 +208,18 @@ export interface WaterfallFilters {
   minDurationMs: number;
   /** Si true, deja solo los spans con status_code === ERROR (2) y sus ancestros. */
   errorsOnly: boolean;
+  /**
+   * Toggle visual de "agrupar por kind". El árbol no se reordena (perderíamos
+   * la cascada temporal); el flag está exclusivamente para que la toolbar
+   * marque el toggle como activo. Reservado para uso futuro de la UI.
+   */
+  groupByKind: boolean;
 }
 
 export const DEFAULT_WATERFALL_FILTERS: WaterfallFilters = {
   minDurationMs: 0,
   errorsOnly: false,
+  groupByKind: false,
 };
 
 /**

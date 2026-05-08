@@ -4,6 +4,7 @@
   "apiVersion": "2.0",
   "runtime": "eager",
   "entry": "./dist/server.js",
+  "initView": "kit-observability.issues.open",
   "assets": {
     "styles": [
       "./dist/assets/observability.css"
@@ -42,7 +43,7 @@
       {
         "path": "Trace",
         "order": 94,
-        "icon": "assets/icons/stream.svg",
+        "icon": "assets/icons/trace.svg",
         "color": "#3D7A64",
         "viewId": "kit-observability.trace.open"
       }
@@ -130,7 +131,7 @@
         "method": "POST",
         "handler": "./dist/endpoints/logs-ingest.js",
         "export": "ingestLog",
-        "auth": "none"
+        "auth": "jwt"
       },
       {
         "id": "issues-query",

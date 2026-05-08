@@ -157,13 +157,21 @@ describe('applyFilters', () => {
 
   it('returns the original tree when no filters are active', () => {
     const tree = buildSample();
-    const filtered = applyFilters(tree, { minDurationMs: 0, errorsOnly: false });
+    const filtered = applyFilters(tree, {
+      minDurationMs: 0,
+      errorsOnly: false,
+      groupByKind: false,
+    });
     expect(filtered).toBe(tree);
   });
 
   it('drops spans below minDurationMs but keeps their ancestors', () => {
     const tree = buildSample();
-    const filtered = applyFilters(tree, { minDurationMs: 1, errorsOnly: false });
+    const filtered = applyFilters(tree, {
+      minDurationMs: 1,
+      errorsOnly: false,
+      groupByKind: false,
+    });
     const ids = flattenTree(filtered).map((n) => n.span.span_id);
     expect(ids).toContain('a');
     expect(ids).not.toContain('b');
@@ -172,7 +180,7 @@ describe('applyFilters', () => {
 
   it('keeps only error spans (and their ancestors) when errorsOnly is true', () => {
     const tree = buildSample();
-    const filtered = applyFilters(tree, { minDurationMs: 0, errorsOnly: true });
+    const filtered = applyFilters(tree, { minDurationMs: 0, errorsOnly: true, groupByKind: false });
     const ids = flattenTree(filtered).map((n) => n.span.span_id);
     expect(ids).toEqual(['a', 'c']);
   });
@@ -181,7 +189,11 @@ describe('applyFilters', () => {
     const tree = buildSample();
     expect(tree.originalSpanCount).toBe(3);
     expect(tree.visibleSpanCount).toBe(3);
-    const filtered = applyFilters(tree, { minDurationMs: 1, errorsOnly: false });
+    const filtered = applyFilters(tree, {
+      minDurationMs: 1,
+      errorsOnly: false,
+      groupByKind: false,
+    });
     expect(filtered.originalSpanCount).toBe(3);
     expect(filtered.visibleSpanCount).toBe(2);
   });

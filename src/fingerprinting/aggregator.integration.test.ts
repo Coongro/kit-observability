@@ -1,14 +1,13 @@
 import type { Sql } from 'postgres';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { runBootstrap } from '../bootstrap/run-bootstrap.js';
 import { LOG_ISSUES_TABLE } from '../schema/log-issues.js';
 import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
 import {
   createTestSql,
   getTestDbUrl,
   resetObservabilitySchema,
-  silentLogger,
+  setupObservabilitySchema,
 } from '../test-utils/db.js';
 
 import { recordIssues, preAggregate } from './aggregator.js';
@@ -41,7 +40,7 @@ describe.skipIf(skipIfNoDb)('recordIssues + preAggregate (integration)', () => {
 
   beforeEach(async () => {
     await resetObservabilitySchema(sql);
-    await runBootstrap(sql, silentLogger);
+    await setupObservabilitySchema(sql);
   });
 
   it('inserta una fila nueva al primer recordIssues', async () => {

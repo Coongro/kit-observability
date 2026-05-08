@@ -15,8 +15,12 @@ import {
   parseStackFromError,
   type StackFrameData,
 } from '../_shared/components/stack-frame.js';
+import { copyToClipboard } from '../_shared/lib/clipboard.js';
 import { absTime, relTime } from '../_shared/lib/format-time.js';
+import { extractSearchToken } from '../_shared/lib/issue-search-token.js';
+import { openStream } from '../_shared/lib/open-stream.js';
 import { openTrace } from '../_shared/lib/open-trace.js';
+import { computeWindow } from '../_shared/lib/time-window.js';
 import { useFetch, formatError } from '../_shared/use-fetch.js';
 
 import { TimelineChart } from './timeline-chart.js';
@@ -51,6 +55,8 @@ export function IssueDetail({
     (signal) => fetchIssueDetail(fingerprint, { signal }),
     [fingerprint]
   );
+  const { views } = usePlugin();
+  const latestRequestId = data?.sample?.request_id ?? null;
 
   const wrapStyle = fullPage
     ? {
@@ -80,6 +86,37 @@ export function IssueDetail({
       fullPage,
       onClose,
       onToggleFull,
+      onOpenLatestTrace: latestRequestId !== null ? () => openTrace(views, latestRequestId) : null,
+      onOpenInStream:
+        data?.issue !== null && data?.issue !== undefined
+          ? () => {
+              // Componemos los 3 filtros en una sola navegación. El backend
+              // los aplica como AND, así que cada uno es opcional y refina
+              // sin romper:
+              //   - source + tenant: ya pre-existía, narrowing grueso.
+              //   - requestId: cuando el sample lo tiene, salto quirúrgico
+              //     a la cadena del request (caso típico: error en HTTP
+              //     handler).
+              //   - q (search token): heurístico desde el mensaje cuando no
+              //     hay request_id (caso típico: audit/cron sin contexto
+              //     HTTP, ej. el DRIFT del TenantStateAudit).
+              //   - window ±2 min de last_seen_at: captura todos los logs
+              //     emitidos en el mismo pase (ej. header DRIFT + sus 7
+              //     detail lines), incluso cuando no comparten request_id.
+              const issue = data.issue;
+              const window = computeWindow(issue.last_seen_at, 2 * 60 * 1000);
+              const fallbackToken =
+                latestRequestId === null ? extractSearchToken(issue.sample_message) : null;
+              openStream(views, {
+                source: issue.source,
+                tenantId: issue.tenant_id,
+                requestId: latestRequestId,
+                q: fallbackToken,
+                from: window?.from ?? null,
+                to: window?.to ?? null,
+              });
+            }
+          : null,
     }),
     h(
       'div',
@@ -120,12 +157,20 @@ function DetailHeader({
   fullPage,
   onClose,
   onToggleFull,
+  onOpenLatestTrace,
+  onOpenInStream,
 }: {
   issue: LogIssue | null;
   fingerprint: string;
   fullPage: boolean;
   onClose: () => void;
   onToggleFull: () => void;
+  /** null mientras carga el detail o cuando el sample no tiene request_id. */
+  onOpenLatestTrace: (() => void) | null;
+  /** null mientras carga el detail. Cuando hay issue, abre Stream filtrado
+   * por su source + tenant para ver el contexto completo (header + lines
+   * below en casos como TenantStateAudit). */
+  onOpenInStream: (() => void) | null;
 }) {
   return h(
     'div',
@@ -147,6 +192,30 @@ function DetailHeader({
     ),
     h(CopyBtn, { value: fingerprint, label: 'copiar fingerprint' }),
     h('div', { style: { flex: 1 } }),
+    onOpenInStream !== null
+      ? h(
+          'button',
+          {
+            className: 'btn btn-secondary btn-sm',
+            onClick: onOpenInStream,
+            title: 'abrir Stream filtrado por source + tenant del issue',
+          },
+          h(ObsIcon, { name: 'list', size: 13 }),
+          h('span', null, 'Ver en Stream')
+        )
+      : null,
+    onOpenLatestTrace !== null
+      ? h(
+          'button',
+          {
+            className: 'btn btn-secondary btn-sm',
+            onClick: onOpenLatestTrace,
+            title: 'abrir el waterfall del último request del issue',
+          },
+          h(ObsIcon, { name: 'link', size: 13 }),
+          h('span', null, 'Ver último trace')
+        )
+      : null,
     h(
       'button',
       {
@@ -208,20 +277,26 @@ function DetailBody({
       right: h(SparkSummary, { spark: issue.sparkline_24h }),
       children: h(TimelineChart, { data: issue.sparkline_24h, level: issue.level, fullPage }),
     }),
-    stackFrames && stackFrames.length > 0
-      ? h(Section, {
-          title: 'STACK TRACE',
-          right: h(
-            'button',
-            {
-              onClick: () => setShowSystemFrames((s) => !s),
-              style: linkBtn(),
-            },
-            showSystemFrames ? 'ocultar frames de node_modules' : 'expandir frames de node_modules'
-          ),
-          children: h(StackList, { frames: stackFrames, showSystemFrames }),
-        })
-      : null,
+    h(Section, {
+      title: 'STACK TRACE',
+      right:
+        stackFrames && stackFrames.some((f) => !f.app)
+          ? h(
+              'button',
+              {
+                onClick: () => setShowSystemFrames((s) => !s),
+                style: linkBtn(),
+              },
+              showSystemFrames
+                ? 'ocultar frames de node_modules'
+                : 'expandir frames de node_modules'
+            )
+          : null,
+      children:
+        stackFrames && stackFrames.length > 0
+          ? h(StackList, { frames: stackFrames, showSystemFrames })
+          : h(NoStackPlaceholder),
+    }),
     detail.sample
       ? ((): React.ReactNode => {
           // Mostramos el log_entry sample completo en lugar de solo
@@ -328,6 +403,17 @@ function ActionRow({
   issue: LogIssue;
   onStatusChange: (status: IssueStatus) => void;
 }) {
+  const { toast } = usePlugin();
+
+  const onOpenInClaudeCode = (): void => {
+    void (async () => {
+      const cmd = `coongro logs query --fingerprint=${issue.fingerprint}`;
+      const ok = await copyToClipboard(cmd);
+      if (ok) toast.success('Comando copiado', cmd);
+      else toast.error('No se pudo copiar al portapapeles', cmd);
+    })();
+  };
+
   return h(
     'div',
     { style: { display: 'flex', gap: 6, marginBottom: 22, flexWrap: 'wrap' } },
@@ -350,6 +436,21 @@ function ActionRow({
           h(ObsIcon, { name: 'refresh', size: 13 }),
           h('span', null, 'Reabrir')
         ),
+    // Snooze 24h: el backend NO tiene status `snoozed` (solo open/resolved/
+    // muted); el prototype lo tenía como mock. Lo dejamos visible pero
+    // disabled para mantener fidelidad visual con el diseño y el tooltip
+    // explica por qué no funciona — cuando el backend lo soporte, basta
+    // con remover `disabled` y pasar el status correcto a `onStatusChange`.
+    h(
+      'button',
+      {
+        className: 'btn btn-secondary btn-sm',
+        disabled: true,
+        title: 'pendiente: el backend no expone status `snoozed` aún',
+      },
+      h(ObsIcon, { name: 'snooze', size: 13 }),
+      h('span', null, 'Snooze 24h')
+    ),
     issue.status !== 'muted'
       ? h(
           'button',
@@ -358,9 +459,23 @@ function ActionRow({
             onClick: () => onStatusChange('muted'),
           },
           h(ObsIcon, { name: 'mute', size: 13 }),
-          h('span', null, 'Silenciar')
+          h('span', null, 'Ignorar')
         )
-      : null
+      : h(
+          'button',
+          {
+            className: 'btn btn-secondary btn-sm',
+            onClick: () => onStatusChange('open'),
+          },
+          h(ObsIcon, { name: 'refresh', size: 13 }),
+          h('span', null, 'Reactivar')
+        ),
+    h(
+      'button',
+      { className: 'btn btn-dark btn-sm', onClick: onOpenInClaudeCode },
+      h(ObsIcon, { name: 'code', size: 13 }),
+      h('span', null, 'Abrir en Claude Code')
+    )
   );
 }
 
@@ -393,6 +508,29 @@ function SparkSummary({ spark }: { spark: number[] }) {
       h('span', { style: { color: 'var(--neutral-500)' } }, 'avg '),
       h('span', { style: { color: 'var(--neutral-950)', fontWeight: 500 } }, `${avg}/h`)
     )
+  );
+}
+
+function NoStackPlaceholder() {
+  // El parser solo entiende `error.stack` (string V8) o `error.frames` (ya
+  // parseado). Si el log_entry no trae ninguno de los dos, mostramos esto
+  // en lugar de ocultar la sección — el usuario espera verla y la ausencia
+  // del stack es un dato útil ("este error no fue capturado con stack").
+  return h(
+    'div',
+    {
+      style: {
+        padding: '14px 16px',
+        background: 'var(--white)',
+        border: '0.5px solid var(--neutral-300)',
+        borderRadius: 8,
+        fontFamily: 'var(--font-sans)',
+        fontSize: 12,
+        color: 'var(--neutral-500)',
+        fontStyle: 'italic',
+      },
+    },
+    'Este log_entry no incluye un stack trace parseable.'
   );
 }
 
@@ -494,50 +632,102 @@ function SimilarEventsList({ events }: { events: IssueDetailData['similarEvents'
     },
     ...events.map((e, i) => {
       const hasTrace = e.request_id !== null && e.request_id.length > 0;
+      // Layout en dos líneas: arriba metadata compacta (timestamp · level ·
+      // tenant · request_id · chev), abajo el mensaje completo. Mensajes
+      // largos como "[TenantStateAudit] DRIFT DETECTED ..." quedaban
+      // elípsizados en una grid horizontal cuando 6 rows competían por el
+      // mismo `1fr`. Stack vertical → leíble sin tooltip + sigue siendo
+      // dense (8px padding).
       return h(
         'div',
         {
           key: e.id,
           onClick: hasTrace ? () => openTrace(views, e.request_id) : undefined,
-          title: hasTrace ? 'ver waterfall del trace' : undefined,
+          title: hasTrace ? 'ver waterfall del trace' : 'sin trace asociado',
           style: {
-            display: 'grid',
-            gridTemplateColumns: '90px 1fr 1fr 24px',
-            gap: 10,
-            padding: '8px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            padding: '10px 14px',
             borderBottom: i < events.length - 1 ? '0.5px solid var(--neutral-300)' : 'none',
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
-            alignItems: 'center',
             cursor: hasTrace ? 'pointer' : 'default',
           },
         },
-        h('span', { style: { color: 'var(--neutral-500)' } }, absTime(e.timestamp)),
+        // Metadata row
         h(
-          'span',
+          'div',
           {
             style: {
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              minWidth: 0,
+            },
+          },
+          h(
+            'span',
+            { style: { color: 'var(--neutral-500)', flexShrink: 0 } },
+            absTime(e.timestamp)
+          ),
+          h(LevelBadge, { level: e.level, size: 'sm' }),
+          e.tenant_id !== null
+            ? h(
+                'span',
+                {
+                  style: {
+                    color: 'var(--neutral-700)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    maxWidth: 110,
+                  },
+                  title: e.tenant_id,
+                },
+                e.tenant_id.slice(0, 8)
+              )
+            : null,
+          e.request_id !== null
+            ? h(
+                'span',
+                {
+                  style: {
+                    color: hasTrace ? 'var(--teal-deep)' : 'var(--neutral-700)',
+                    textDecoration: hasTrace ? 'underline' : 'none',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    flex: 1,
+                    minWidth: 0,
+                  },
+                  title: e.request_id,
+                },
+                e.request_id
+              )
+            : h('span', { style: { color: 'var(--neutral-500)', flex: 1 } }, '—'),
+          hasTrace
+            ? h(ObsIcon, {
+                name: 'chevRight',
+                size: 11,
+                style: { color: 'var(--neutral-500)', flexShrink: 0 },
+              })
+            : null
+        ),
+        // Mensaje row — wrap normal, sin truncar
+        h(
+          'div',
+          {
+            style: {
+              fontFamily: 'var(--font-sans)',
+              fontSize: 12,
               color: 'var(--neutral-950)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
+              lineHeight: 1.4,
+              wordBreak: 'break-word',
             },
           },
           e.message
-        ),
-        h(
-          'span',
-          {
-            style: {
-              color: hasTrace ? 'var(--teal-deep)' : 'var(--neutral-700)',
-              textDecoration: hasTrace ? 'underline' : 'none',
-            },
-          },
-          e.request_id ?? e.tenant_id ?? '—'
-        ),
-        hasTrace
-          ? h(ObsIcon, { name: 'chevRight', size: 11, style: { color: 'var(--neutral-500)' } })
-          : h('span')
+        )
       );
     })
   );

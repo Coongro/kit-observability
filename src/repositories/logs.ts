@@ -7,7 +7,13 @@ import { where } from './_lib/sql-filters.js';
 const ENTRIES_TABLE = `"${OBSERVABILITY_SCHEMA_NAME}"."log_entries"`;
 
 export interface LogQueryFilters {
-  level?: number;
+  /**
+   * Filtra por uno o más niveles. Acepta array para que el Stream pueda
+   * pedir "warn + error" en una sola query (antes el backend solo aceptaba
+   * level único, lo que forzaba al frontend a fetch-all + filter-client —
+   * y rompía cuando los logs recientes no incluían los niveles pedidos).
+   */
+  levels?: number[];
   source?: string;
   tenantId?: string;
   /**
@@ -47,7 +53,7 @@ export interface LogQueryResult {
 
 export async function queryLogs(raw: Sql, filters: LogQueryFilters): Promise<LogQueryResult> {
   const { whereClause, params, nextIdx } = where()
-    .eq('level', filters.level)
+    .inList('level', filters.levels)
     .eq('source', filters.source)
     .eq('tenant_id', filters.tenantId, { cast: 'uuid' })
     .eq('request_id', filters.requestId)

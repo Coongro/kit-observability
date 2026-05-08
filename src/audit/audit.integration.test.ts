@@ -1,7 +1,6 @@
 import type { Sql } from 'postgres';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { runBootstrap } from '../bootstrap/run-bootstrap.js';
 import { AUDIT_EVENTS_TABLE } from '../schema/audit-events.js';
 import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
 import {
@@ -9,6 +8,7 @@ import {
   createTestSystemDatabase,
   getTestDbUrl,
   resetObservabilitySchema,
+  setupObservabilitySchema,
   silentLogger,
 } from '../test-utils/db.js';
 
@@ -34,7 +34,7 @@ describe.skipIf(skipIfNoDb)('AuditLog (integration)', () => {
     sql = createTestSql();
     audit = new AuditLog(createTestSystemDatabase(sql), silentLogger);
     await resetObservabilitySchema(sql);
-    await runBootstrap(sql, silentLogger);
+    await setupObservabilitySchema(sql);
   });
 
   afterAll(async () => {
@@ -95,13 +95,14 @@ describe.skipIf(skipIfNoDb)('AuditLog (integration)', () => {
     });
 
     it('no lanza aunque el INSERT falle, pero loggea via logger.error', async () => {
+      const failure = new Error('simulated DB failure');
       const brokenDb = {
-        raw: { unsafe: () => Promise.reject(new Error('simulated DB failure')) },
+        raw: { unsafe: () => Promise.reject(failure) },
       };
-      const errors: { msg: string; meta?: Record<string, unknown> }[] = [];
+      const errors: { msg: string; error?: unknown; meta?: Record<string, unknown> }[] = [];
       const captureLogger = {
-        error: (msg: string, meta?: Record<string, unknown>) => {
-          errors.push({ msg, meta });
+        error: (msg: string, error?: unknown, meta?: Record<string, unknown>) => {
+          errors.push({ msg, error, meta });
         },
       };
       const badAudit = new AuditLog(brokenDb as never, captureLogger);
@@ -110,7 +111,82 @@ describe.skipIf(skipIfNoDb)('AuditLog (integration)', () => {
       await new Promise<void>((r) => setTimeout(r, 10));
       expect(errors).toHaveLength(1);
       expect(errors[0]?.msg).toBe('audit.record_failed');
+      // El Error real va como 2do arg (no aplastado dentro de meta) — esto
+      // es lo que permite al bridge pino del host serializarlo con stack.
+      expect(errors[0]?.error).toBe(failure);
       expect(errors[0]?.meta).toMatchObject({ action: 'should.fail' });
+    });
+
+    it('coerce actorId no-UUID a NULL y preserva el original en metadata.actorIdRaw', async () => {
+      audit.record({
+        action: 'user.login',
+        tenantId: TENANT_A,
+        actorId: 42,
+      });
+      await drain();
+
+      const rows = await sql.unsafe<
+        { actor_id: string | null; metadata: Record<string, unknown> | null }[]
+      >(`SELECT actor_id, metadata FROM ${TABLE}`);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.actor_id).toBeNull();
+      expect(rows[0]?.metadata).toEqual({ actorIdRaw: '42' });
+    });
+
+    it('actorId UUID válido va a actor_id sin tocar metadata', async () => {
+      audit.record({
+        action: 'user.login',
+        tenantId: TENANT_A,
+        actorId: ACTOR_ID,
+        metadata: { source: 'cli' },
+      });
+      await drain();
+
+      const rows = await sql.unsafe<
+        { actor_id: string | null; metadata: Record<string, unknown> | null }[]
+      >(`SELECT actor_id, metadata FROM ${TABLE}`);
+      expect(rows[0]?.actor_id).toBe(ACTOR_ID);
+      expect(rows[0]?.metadata).toEqual({ source: 'cli' });
+    });
+
+    it('tenantId no-UUID también se coerce a NULL sin reventar el INSERT', async () => {
+      audit.record({
+        action: 'system.something',
+        tenantId: 'not-a-uuid',
+      });
+      await drain();
+
+      const rows = await sql.unsafe<{ tenant_id: string | null }[]>(
+        `SELECT tenant_id FROM ${TABLE}`
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.tenant_id).toBeNull();
+    });
+
+    it('persiste requestId en la columna request_id', async () => {
+      audit.record({
+        action: 'plugin.installed',
+        tenantId: TENANT_A,
+        actorId: ACTOR_ID,
+        requestId: 'req-abc-123',
+      });
+      await drain();
+
+      const rows = await sql.unsafe<{ request_id: string | null }[]>(
+        `SELECT request_id FROM ${TABLE}`
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.request_id).toBe('req-abc-123');
+    });
+
+    it('requestId omitido se persiste como NULL (cron, boot, etc.)', async () => {
+      audit.record({ action: 'cron.tick' });
+      await drain();
+
+      const rows = await sql.unsafe<{ request_id: string | null }[]>(
+        `SELECT request_id FROM ${TABLE}`
+      );
+      expect(rows[0]?.request_id).toBeNull();
     });
 
     it('genera id uuid y timestamp automáticamente', async () => {
@@ -137,7 +213,12 @@ describe.skipIf(skipIfNoDb)('AuditLog (integration)', () => {
         entityType: 'role',
         entityId: 'admin',
       });
-      audit.record({ action: 'user.login', tenantId: TENANT_A, actorId: ACTOR_ID });
+      audit.record({
+        action: 'user.login',
+        tenantId: TENANT_A,
+        actorId: ACTOR_ID,
+        requestId: 'req-login-1',
+      });
       audit.record({ action: 'user.login', tenantId: TENANT_B });
       audit.record({
         action: 'entity.update',
@@ -186,6 +267,13 @@ describe.skipIf(skipIfNoDb)('AuditLog (integration)', () => {
       const rows = await audit.query({ tenantId: TENANT_A, action: 'user.login' });
       expect(rows).toHaveLength(1);
       expect(rows[0]?.tenantId).toBe(TENANT_A);
+      expect(rows[0]?.action).toBe('user.login');
+    });
+
+    it('filtra por requestId para reconstruir un request específico', async () => {
+      const rows = await audit.query({ requestId: 'req-login-1' });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.requestId).toBe('req-login-1');
       expect(rows[0]?.action).toBe('user.login');
     });
 

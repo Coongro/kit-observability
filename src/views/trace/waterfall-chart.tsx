@@ -1,23 +1,19 @@
-// Cascada de spans — header con eje de tiempo + filas por span. La
-// indentación visual viene del `depth` precomputado en el árbol y la
-// posición/ancho de cada barra de `offsetFraction`/`widthFraction`.
+// Cascada del trace según el prototype: tree column fija de 280px con
+// border-right + área de barras flex con tick gridlines verticales y
+// sticky header con eyebrow "span · service" / "línea de tiempo · 0ms →
+// Xms" / "kind · duración".
 //
 // El componente NO hace cálculos de tiempo — todo viene listo del módulo
-// `lib/build-tree.ts`. El único cálculo acá es el render de los ticks
-// del eje (4 marcas equidistantes).
+// `lib/build-tree.ts`.
 
 import { getHostReact } from '@coongro/plugin-sdk';
 
-import { formatDuration } from '../_shared/lib/format-time.js';
-
 import { type SpanNode, type TraceTree, flattenTree } from './lib/build-tree.js';
-import { WATERFALL_LABEL_COL_WIDTH as LABEL_COL_WIDTH } from './lib/waterfall-layout.js';
+import { WATERFALL_TICK_COUNT, WATERFALL_TREE_COL_WIDTH } from './lib/waterfall-layout.js';
 import { SpanRow } from './span-row.js';
 
 const React = getHostReact();
 const h = React.createElement;
-
-const TICK_COUNT = 4;
 
 export interface WaterfallChartProps {
   tree: TraceTree;
@@ -37,109 +33,139 @@ export function WaterfallChart({
   onToggleCollapse,
 }: WaterfallChartProps) {
   const flat = flattenTree(tree, collapsedIds);
+  const traceDurationMs = Math.round(tree.traceDurationMs);
 
+  return h(
+    'div',
+    {
+      style: {
+        flex: 1,
+        minHeight: 0,
+        overflow: 'auto',
+        background: 'var(--white)',
+      },
+    },
+    h(WaterfallHeader, { traceDurationMs }),
+    ...flat.map((node) =>
+      h(SpanRow, {
+        key: node.span.span_id,
+        node,
+        selected: node.span.span_id === selectedSpanId,
+        collapsed: collapsedIds.has(node.span.span_id),
+        onSelect: () => onSelectSpan(node),
+        onToggleCollapse: () => onToggleCollapse(node.span.span_id),
+      })
+    ),
+    flat.length === 0
+      ? h(
+          'div',
+          {
+            style: {
+              padding: '60px 22px',
+              textAlign: 'center',
+              color: 'var(--neutral-500)',
+              fontSize: 13,
+            },
+          },
+          'No hay spans con esos filtros. Probá bajar el umbral de ms.'
+        )
+      : null
+  );
+}
+
+function WaterfallHeader({ traceDurationMs }: { traceDurationMs: number }) {
   return h(
     'div',
     {
       style: {
         display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--white)',
-        border: '0.5px solid var(--neutral-300)',
-        borderRadius: 8,
-        overflow: 'hidden',
-      },
-    },
-    h(TimeAxisHeader, { traceDurationNs: tree.traceDurationNs }),
-    h(
-      'div',
-      { style: { display: 'flex', flexDirection: 'column' } },
-      ...flat.map((node) =>
-        h(SpanRow, {
-          key: node.span.span_id,
-          node,
-          selected: node.span.span_id === selectedSpanId,
-          collapsed: collapsedIds.has(node.span.span_id),
-          onSelect: () => onSelectSpan(node),
-          onToggleCollapse: () => onToggleCollapse(node.span.span_id),
-        })
-      )
-    )
-  );
-}
-
-function TimeAxisHeader({ traceDurationNs }: { traceDurationNs: number }) {
-  const ticks = Array.from({ length: TICK_COUNT + 1 }, (_, i) => {
-    const fraction = i / TICK_COUNT;
-    return {
-      fraction,
-      label: formatDuration(traceDurationNs * fraction),
-    };
-  });
-
-  return h(
-    'div',
-    {
-      style: {
-        display: 'grid',
-        gridTemplateColumns: `${LABEL_COL_WIDTH}px 1fr`,
-        height: 28,
+        position: 'sticky',
+        top: 0,
+        zIndex: 5,
         background: 'var(--neutral-100)',
         borderBottom: '0.5px solid var(--neutral-300)',
-        alignItems: 'center',
       },
     },
     h(
       'div',
       {
         style: {
-          paddingLeft: 14,
+          width: WATERFALL_TREE_COL_WIDTH,
+          flexShrink: 0,
+          padding: '8px 14px',
           fontFamily: 'var(--font-sans)',
           fontSize: 10.5,
           fontWeight: 500,
           color: 'var(--neutral-700)',
           letterSpacing: '0.04em',
           textTransform: 'uppercase',
+          borderRight: '0.5px solid var(--neutral-300)',
         },
       },
-      'span'
+      'span · service'
     ),
     h(
       'div',
-      {
-        style: {
-          position: 'relative',
-          height: 28,
-          marginRight: 16,
+      { style: { flex: 1, position: 'relative', minWidth: 320 } },
+      h(
+        'div',
+        {
+          style: {
+            display: 'flex',
+            justifyContent: 'space-between',
+            padding: '8px 16px',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 10.5,
+            fontWeight: 500,
+            color: 'var(--neutral-700)',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+          },
         },
-      },
-      ...ticks.map((tick, idx) => {
-        // El primer tick se ancla al borde izquierdo y el último al derecho;
-        // el resto se centra. Sin esto las labels se cortan en los extremos.
-        let transform: string;
-        if (idx === 0) {
-          transform = 'none';
-        } else if (idx === ticks.length - 1) {
-          transform = 'translateX(-100%)';
-        } else {
-          transform = 'translateX(-50%)';
-        }
-        return h(
+        h('span', null, `línea de tiempo · 0ms → ${traceDurationMs}ms`),
+        h(
           'span',
           {
-            key: `tick-${idx}`,
             style: {
-              position: 'absolute',
-              top: 6,
-              left: `${(tick.fraction * 100).toFixed(2)}%`,
-              transform,
               fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              color: 'var(--neutral-500)',
+              textTransform: 'none',
+              letterSpacing: 0,
             },
           },
-          tick.label
-        );
+          'kind · duración'
+        )
+      )
+    )
+  );
+}
+
+/**
+ * Tick gridlines verticales — renderizan líneas hairline en el área de barras
+ * para que el ojo pueda leer offsets relativos. Se exponen acá para que el
+ * SpanRow pueda overlayearlas detrás de la barra.
+ */
+export function WaterfallTicks({ tickCount }: { tickCount?: number } = {}) {
+  const count = tickCount ?? WATERFALL_TICK_COUNT;
+  return h(
+    'div',
+    {
+      style: {
+        position: 'absolute',
+        inset: 0,
+        pointerEvents: 'none',
+      },
+    },
+    ...Array.from({ length: count }).map((_, i) =>
+      h('div', {
+        key: i,
+        style: {
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: `${(i / (count - 1)) * 100}%`,
+          width: 0.5,
+          background: i === 0 || i === count - 1 ? 'transparent' : 'var(--neutral-200)',
+        },
       })
     )
   );

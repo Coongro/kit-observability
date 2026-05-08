@@ -28,8 +28,23 @@ export async function queryIssuesEndpoint(context: HttpEndpointContext): Promise
   const { query } = context;
 
   const level = parseOptionalInt(query['level']);
+  const levelsCsv = parseOptionalString(query['levels']);
+
   if (level !== undefined && (level < 0 || !Number.isFinite(level))) {
     return badRequest('level must be a non-negative integer');
+  }
+
+  // `levels` (CSV) toma precedencia sobre `level` legacy. Mismo contrato
+  // que `/logs/query` para que ambos endpoints sean simétricos.
+  let levels: number[] | undefined;
+  if (levelsCsv !== undefined) {
+    const parsed = levelsCsv.split(',').map((s) => Number(s.trim()));
+    if (parsed.some((n) => !Number.isInteger(n) || n < 0)) {
+      return badRequest('levels must be a comma-separated list of non-negative integers');
+    }
+    levels = parsed;
+  } else if (level !== undefined) {
+    levels = [level];
   }
 
   const status = parseEnumList<IssueStatus>(query['status'], VALID_STATUSES);
@@ -38,7 +53,7 @@ export async function queryIssuesEndpoint(context: HttpEndpointContext): Promise
   }
 
   return queryIssuesService({
-    level,
+    levels,
     status,
     tenantId: parseOptionalString(query['tenant_id']),
     source: parseOptionalString(query['source']),

@@ -1,6 +1,8 @@
 import type { Sql } from 'postgres';
 
 import {
+  ADD_AUDIT_EVENTS_REQUEST_ID_INDEX_SQL,
+  ADD_AUDIT_EVENTS_REQUEST_ID_SQL,
   CREATE_AUDIT_EVENTS_INDEXES_SQL,
   CREATE_AUDIT_EVENTS_SQL,
   CREATE_LOG_ENTRIES_INDEXES_SQL,
@@ -109,6 +111,9 @@ async function applyMigrations(raw: Sql, from: number, logger: BootstrapLogger):
   if (from < 2) {
     await migrateV1ToV2(raw, logger);
   }
+  if (from < 3) {
+    await migrateV2ToV3(raw, logger);
+  }
 }
 
 async function migrateV1ToV2(raw: Sql, logger: BootstrapLogger): Promise<void> {
@@ -117,6 +122,12 @@ async function migrateV1ToV2(raw: Sql, logger: BootstrapLogger): Promise<void> {
     await raw.unsafe(stmt);
   }
   logger.info('migration v1→v2: table audit_events created');
+}
+
+async function migrateV2ToV3(raw: Sql, logger: BootstrapLogger): Promise<void> {
+  await raw.unsafe(ADD_AUDIT_EVENTS_REQUEST_ID_SQL);
+  await raw.unsafe(ADD_AUDIT_EVENTS_REQUEST_ID_INDEX_SQL);
+  logger.info('migration v2→v3: audit_events.request_id added');
 }
 
 async function applyV1(raw: Sql, logger: BootstrapLogger): Promise<void> {

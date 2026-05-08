@@ -1,22 +1,24 @@
-// Una fila del waterfall — label indentada por depth + barra posicionada
-// con offsetFraction/widthFraction. Click la marca como seleccionada y
-// avisa al view raíz para abrir el SpanDetail panel.
+// Una fila del waterfall según el prototype: tree column fija con chevron
+// rotation + KindBadge + name (mono si db) + service line + bars area con
+// tick gridlines y bar coloreada por kind.
 
 import { getHostReact } from '@coongro/plugin-sdk';
 
 import { ObsIcon } from '../_shared/components/icons.js';
-import { formatDuration } from '../_shared/lib/format-time.js';
 
+import { KindBadge } from './kind-badge.js';
 import type { SpanNode } from './lib/build-tree.js';
-import { spanBarBackgroundColor, spanBarColor } from './lib/span-color.js';
+import { displayKind, spanBarColor } from './lib/kind-palette.js';
+import { OTEL_STATUS_CODE_ERROR } from './lib/otel.js';
 import {
   WATERFALL_DEPTH_INDENT as DEPTH_INDENT,
-  WATERFALL_LABEL_COL_WIDTH as LABEL_COL_WIDTH,
-  WATERFALL_ROW_HEIGHT as ROW_HEIGHT,
+  WATERFALL_TICK_COUNT as TICK_COUNT,
+  WATERFALL_TREE_COL_WIDTH as TREE_W,
 } from './lib/waterfall-layout.js';
 
 const React = getHostReact();
 const h = React.createElement;
+const { useState } = React;
 
 export interface SpanRowProps {
   node: SpanNode;
@@ -27,154 +29,242 @@ export interface SpanRowProps {
 }
 
 export function SpanRow({ node, selected, collapsed, onSelect, onToggleCollapse }: SpanRowProps) {
+  const [hover, setHover] = useState(false);
+  const { span } = node;
+  const dk = displayKind(span);
+  const isError = span.status_code === OTEL_STATUS_CODE_ERROR;
+  const hasChildren = node.children.length > 0;
+
   return h(
     'div',
     {
+      onMouseEnter: () => setHover(true),
+      onMouseLeave: () => setHover(false),
       onClick: onSelect,
       style: {
-        display: 'grid',
-        gridTemplateColumns: `${LABEL_COL_WIDTH}px 1fr`,
-        height: ROW_HEIGHT,
-        alignItems: 'center',
-        cursor: 'pointer',
-        background: selected ? 'var(--neutral-100)' : 'transparent',
+        display: 'flex',
+        position: 'relative',
+        background: selected
+          ? 'var(--neutral-100)'
+          : hover
+            ? 'rgba(247,243,235,0.5)'
+            : 'var(--white)',
         borderBottom: '0.5px solid var(--neutral-300)',
+        cursor: 'pointer',
       },
     },
-    h(SpanLabel, { node, collapsed, onToggleCollapse }),
-    h(SpanBar, { node })
+    selected
+      ? h('div', {
+          style: {
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 2,
+            background: 'var(--neutral-950)',
+          },
+        })
+      : null,
+    h(TreeCol, {
+      node,
+      dk,
+      isError,
+      hasChildren,
+      collapsed,
+      onToggleCollapse,
+    }),
+    h(BarsCol, { node, isError })
   );
 }
 
-function SpanLabel({
+function TreeCol({
   node,
+  dk,
+  isError,
+  hasChildren,
   collapsed,
   onToggleCollapse,
 }: {
   node: SpanNode;
+  dk: ReturnType<typeof displayKind>;
+  isError: boolean;
+  hasChildren: boolean;
   collapsed: boolean;
   onToggleCollapse: () => void;
 }) {
+  const isDb = dk === 'db';
   return h(
     'div',
     {
       style: {
-        paddingLeft: 14 + node.depth * DEPTH_INDENT,
-        paddingRight: 12,
+        width: TREE_W,
+        flexShrink: 0,
         display: 'flex',
         alignItems: 'center',
-        gap: 6,
-        overflow: 'hidden',
+        gap: 4,
+        padding: `7px 14px 7px ${14 + node.depth * DEPTH_INDENT}px`,
+        borderRight: '0.5px solid var(--neutral-300)',
+        minWidth: 0,
       },
     },
-    node.children.length > 0
+    hasChildren
       ? h(
           'button',
           {
-            onClick: (ev: { stopPropagation: () => void }) => {
-              ev.stopPropagation();
+            onClick: (e: { stopPropagation: () => void }) => {
+              e.stopPropagation();
               onToggleCollapse();
             },
             title: collapsed ? 'expandir' : 'colapsar',
             style: {
+              width: 16,
+              height: 16,
+              padding: 0,
               background: 'transparent',
               border: 'none',
-              padding: 0,
               cursor: 'pointer',
+              color: 'var(--neutral-700)',
               display: 'inline-flex',
               alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'transform 120ms',
+              transform: collapsed ? 'rotate(0deg)' : 'rotate(90deg)',
               flexShrink: 0,
             },
           },
-          h(ObsIcon, {
-            name: collapsed ? 'chevRight' : 'chevDown',
-            size: 11,
-            style: { color: 'var(--neutral-500)' },
-          })
+          h(ObsIcon, { name: 'chevRight', size: 11 })
         )
-      : h('span', { style: { width: 11, flexShrink: 0 } }),
-    h(
-      'span',
-      {
-        style: {
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          color: 'var(--neutral-950)',
-          fontWeight: node.depth === 0 ? 600 : 400,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        },
-      },
-      node.span.name
-    ),
-    node.span.kind
-      ? h(
+      : h(
           'span',
           {
             style: {
-              fontFamily: 'var(--font-mono)',
-              fontSize: 9.5,
-              color: 'var(--neutral-500)',
-              padding: '1px 5px',
-              border: '0.5px solid var(--neutral-300)',
-              borderRadius: 3,
+              width: 16,
               flexShrink: 0,
+              display: 'inline-block',
+              textAlign: 'center',
+              color: 'var(--neutral-300)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
             },
           },
-          node.span.kind
-        )
-      : null
+          '·'
+        ),
+    h(KindBadge, { kind: dk }),
+    h(
+      'div',
+      { style: { minWidth: 0, flex: 1 } },
+      h(
+        'div',
+        {
+          style: {
+            fontFamily: isDb ? 'var(--font-mono)' : 'var(--font-sans)',
+            fontSize: isDb ? 11.5 : 12.5,
+            fontWeight: 500,
+            color: 'var(--neutral-950)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          },
+        },
+        node.span.name
+      ),
+      h(
+        'div',
+        {
+          style: {
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10.5,
+            color: 'var(--neutral-500)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          },
+        },
+        node.span.service_name ?? 'sin service',
+        isError
+          ? h('span', { style: { color: 'var(--red)', marginLeft: 6, fontWeight: 500 } }, '· error')
+          : null
+      )
+    )
   );
 }
 
-function SpanBar({ node }: { node: SpanNode }) {
-  const offsetPct = `${(node.offsetFraction * 100).toFixed(2)}%`;
-  const widthPct = `${(node.widthFraction * 100).toFixed(2)}%`;
-  const color = spanBarColor(node.span);
-  const bg = spanBarBackgroundColor(node.span);
-  const durationLabel = node.inFlight ? 'in-flight' : formatDuration(node.durationNs.toString());
+function BarsCol({ node, isError }: { node: SpanNode; isError: boolean }) {
+  const startPct = node.offsetFraction * 100;
+  const widthPct = Math.max(node.widthFraction * 100, 0.3);
+  const color = isError ? 'var(--red)' : spanBarColor(node.span);
+  const durationLabel = node.inFlight ? 'in-flight' : `${formatMs(node.durationNs)}ms`;
 
   return h(
     'div',
     {
       style: {
+        flex: 1,
         position: 'relative',
-        height: ROW_HEIGHT,
-        marginRight: 16,
-        background: bg,
-        borderRadius: 3,
-        overflow: 'visible',
+        minWidth: 320,
       },
     },
-    h('div', {
-      style: {
-        position: 'absolute',
-        top: 6,
-        bottom: 6,
-        left: offsetPct,
-        width: widthPct,
-        minWidth: 2,
-        background: color,
-        borderRadius: 3,
-        opacity: node.inFlight ? 0.5 : 1,
-      },
-    }),
+    // Tick gridlines
+    ...Array.from({ length: TICK_COUNT }).map((_, i) =>
+      h('div', {
+        key: `tick-${i}`,
+        style: {
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: `${(i / (TICK_COUNT - 1)) * 100}%`,
+          width: 0.5,
+          background: i === 0 || i === TICK_COUNT - 1 ? 'transparent' : 'var(--neutral-200)',
+        },
+      })
+    ),
+    // Bar + duration label como un solo bloque posicionado. El label vive
+    // INSIDE la barra al inicio (4px de padding), texto blanco sobre el fill
+    // coloreado, con overflow hidden — para barras muy chicas el label se
+    // clipea (la duración exacta queda visible en el drawer del span).
+    // Anclar el label al inicio en lugar de al final evita que spans cerca
+    // del 100% empujen el texto fuera del timeline.
     h(
-      'span',
+      'div',
       {
         style: {
           position: 'absolute',
-          top: 4,
-          left: `calc(${offsetPct} + ${widthPct} + 6px)`,
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10.5,
-          color: 'var(--neutral-700)',
-          whiteSpace: 'nowrap',
-          pointerEvents: 'none',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          left: `calc(${startPct}% + 16px)`,
+          width: `calc(${widthPct}% - 32px * ${widthPct / 100})`,
+          minWidth: 4,
+          height: 14,
+          background: color,
+          borderRadius: 2,
+          boxShadow: isError ? 'inset 0 0 0 0.5px var(--red-deep)' : 'none',
+          opacity: node.inFlight ? 0.5 : 1,
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 4px',
         },
       },
-      durationLabel
+      h(
+        'span',
+        {
+          style: {
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            color: 'var(--white)',
+            fontWeight: 500,
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            lineHeight: 1,
+          },
+        },
+        durationLabel
+      )
     )
   );
+}
+
+function formatMs(ns: number): string {
+  if (ns < 1_000_000) return (ns / 1_000_000).toFixed(2);
+  return Math.round(ns / 1_000_000).toString();
 }

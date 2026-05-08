@@ -3,6 +3,9 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
 
+import { runBootstrap } from '../bootstrap/run-bootstrap.js';
+import { loadConfig } from '../config.js';
+import { registerPartitions } from '../partitions/register.js';
 import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
 
 /**
@@ -47,6 +50,35 @@ export async function resetObservabilitySchema(sql: Sql): Promise<void> {
 }
 
 /**
+ * Compañero simétrico de `resetObservabilitySchema`: deja la DB en el mismo
+ * estado funcional que `activate()` produce en producción — schema + DDL +
+ * partman registrado para `log_entries` y `log_spans`.
+ *
+ * Por qué no basta con `runBootstrap`: el DDL declara las tablas como
+ * `PARTITION BY RANGE`, pero las particiones hijas las crea `partman.create_parent`
+ * vía `registerPartitions`. Si un test setup hace solo `reset + runBootstrap`,
+ * deja log_entries/log_spans particionadas SIN children attached y cualquier
+ * INSERT subsiguiente falla con "no partition of relation X found for row".
+ *
+ * Esto importa incluso para tests que no tocan log_entries/log_spans, porque
+ * los integration tests corren contra una DB compartida (`OBSERVABILITY_TEST_DB_URL`)
+ * y el siguiente test — o el API en runtime apuntando a la misma DB — sí
+ * puede insertar. Setup simétrico al reset evita el envenenamiento entre
+ * suites.
+ *
+ * Usa `loadConfig({})` (defaults) — los tests que necesitan retentions custom
+ * pueden re-llamar `registerPartitions(sql, customConfig, ...)` después; partman
+ * es idempotente.
+ *
+ * NO usar en `bootstrap.integration.test.ts`: ese archivo testea `runBootstrap`
+ * en aislamiento y no debe acoplarse a `registerPartitions`.
+ */
+export async function setupObservabilitySchema(sql: Sql): Promise<void> {
+  await runBootstrap(sql, silentLogger);
+  await registerPartitions(sql, loadConfig({}), silentLogger);
+}
+
+/**
  * Lista las particiones hijas de una tabla parent (filtra desde pg_inherits).
  * Útil para verificar que pg_partman creó las particiones diarias.
  */
@@ -84,12 +116,14 @@ export function createTestSystemDatabase(sql: Sql): SystemDatabase {
 }
 
 export interface SilentLogger {
-  info: (msg: string, meta?: Record<string, unknown>) => void;
-  warn: (msg: string, meta?: Record<string, unknown>) => void;
-  error: (msg: string, meta?: Record<string, unknown>) => void;
+  // Variadic para satisfacer cualquier firma (info(msg, meta), error(msg, err, meta), etc.)
+  // sin tener que mantener este tipo en sync con cada interface consumidora.
+  info: (...args: unknown[]) => void;
+  warn: (...args: unknown[]) => void;
+  error: (...args: unknown[]) => void;
 }
 
-/** Logger no-op que satisface las interfaces de bootstrap/registerPartitions. */
+/** Logger no-op que satisface las interfaces de bootstrap/registerPartitions/AuditLog. */
 export const silentLogger: SilentLogger = {
   info: () => {},
   warn: () => {},
