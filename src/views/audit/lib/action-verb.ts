@@ -101,6 +101,30 @@ export function getActionVerbColors(action: string): VerbColors {
 }
 
 /**
+ * Variante que devuelve `null` cuando la categoría es `neutral`. Útil para
+ * el chip de target: las actions del core ya colorizamos por verbo, pero
+ * los targets son a veces references puros (`user:123`, `plugin:@coongro/x`)
+ * sin verbo legible — en esos casos el caller mantiene el styling default
+ * en vez de pintarlos como `neutral` explícito.
+ *
+ * Ejemplos:
+ *   `calendar.events.create` → creative palette (último seg = `create`)
+ *   `appointments.update`    → modifier palette
+ *   `patients.delete`        → destructive palette
+ *   `plugin_action`          → null (sin verbo identificable)
+ *   `user:123`               → null (no contiene `.` y `123` no es verbo)
+ *
+ * Atención: clasificamos sobre el ÚLTIMO segmento separado por `.`, no por
+ * `:`. Esto asume que `entityType:entityId` viene formateado como
+ * `${type}:${id}` por el caller; si querés clasificar por entityId puro,
+ * pasale `event.entityId` directo.
+ */
+export function getVerbColorsIfMeaningful(text: string): VerbColors | null {
+  const category = classifyAction(text);
+  return category === 'neutral' ? null : PALETTE[category];
+}
+
+/**
  * Clasifica una action en una categoría visual. Exportado para tests y
  * para callers que quieran agrupar/contar por categoría sin volver a
  * recalcular paletas.

@@ -5,7 +5,7 @@ import { CopyBtn } from '../_shared/components/copy-btn.js';
 import { shortenId } from '../_shared/lib/format-id.js';
 import { absTime, relTime } from '../_shared/lib/format-time.js';
 
-import { getActionVerbColors } from './lib/action-verb.js';
+import { getActionVerbColors, getVerbColorsIfMeaningful } from './lib/action-verb.js';
 import { MetaSummary } from './meta-summary.js';
 
 const React = getHostReact();
@@ -27,6 +27,14 @@ export function AuditRow({ event, resolveTenantName }: AuditRowProps) {
   const [hover, setHover] = useState(false);
   const verbColors = getActionVerbColors(event.action);
   const targetLabel = formatTarget(event.entityType, event.entityId);
+  // Color del target chip: si el entityId termina en un verbo conocido
+  // (`calendar.events.create`, `appointments.update`), pintamos el chip
+  // según ese verbo. Esto cubre el caso de auto-wired repos donde la
+  // action genérica `plugin.action.executed` no comunica la operación
+  // real — la información de "qué se hizo" vive en el entityId.
+  // Si el entityId no tiene verbo identificable (`user:123`, refs puros),
+  // dejamos el chip en su styling neutral default.
+  const targetVerbColors = event.entityId ? getVerbColorsIfMeaningful(event.entityId) : null;
   const tenantName = event.tenantId ? resolveTenantName(event.tenantId) : undefined;
 
   return h(
@@ -101,7 +109,7 @@ export function AuditRow({ event, resolveTenantName }: AuditRowProps) {
         event.action
       )
     ),
-    // ── target (wrap permitido, sin elipsis) ────────────────────────
+    // ── target (wrap permitido, sin elipsis, color por verbo del entityId) ─
     h(
       'td',
       { style: cell() },
@@ -115,10 +123,13 @@ export function AuditRow({ event, resolveTenantName }: AuditRowProps) {
                 gap: 4,
                 padding: '2px 6px',
                 borderRadius: 3,
-                background: 'var(--neutral-200)',
+                // Si el entityId tiene un verbo identificable
+                // (`...create`, `...update`, `...delete`), pintamos
+                // el chip; sino default neutral.
+                background: targetVerbColors?.bg ?? 'var(--neutral-200)',
+                color: targetVerbColors?.fg ?? 'var(--neutral-950)',
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
-                color: 'var(--neutral-950)',
                 maxWidth: '100%',
                 // Multi-line wrap para entityIds largos (UUIDs, slug+id):
                 // `wordBreak: break-all` permite cortar dentro de la

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { classifyAction, getActionVerbColors } from './action-verb.js';
+import { classifyAction, getActionVerbColors, getVerbColorsIfMeaningful } from './action-verb.js';
 
 describe('classifyAction', () => {
   // --- destructive ---
@@ -69,5 +69,32 @@ describe('getActionVerbColors', () => {
     const c = getActionVerbColors('something.weird');
     expect(c.bg).toBe('var(--neutral-200)');
     expect(c.fg).toBe('var(--neutral-700)');
+  });
+});
+
+describe('getVerbColorsIfMeaningful', () => {
+  it('entityIds tipo "modulo.entidad.verbo" (auto-wired repos) detectan el verbo del último segmento', () => {
+    expect(getVerbColorsIfMeaningful('calendar.events.create')).toMatchObject({
+      bg: 'var(--teal-soft)',
+    });
+    expect(getVerbColorsIfMeaningful('appointments.update')).toMatchObject({
+      bg: 'var(--gold-soft)',
+    });
+    expect(getVerbColorsIfMeaningful('patients.delete')).toMatchObject({
+      bg: 'var(--red-soft)',
+    });
+  });
+
+  it('targets sin verbo identificable devuelven null (caller mantiene neutral default)', () => {
+    expect(getVerbColorsIfMeaningful('plugin_action')).toBeNull();
+    expect(getVerbColorsIfMeaningful('user:123')).toBeNull();
+    expect(getVerbColorsIfMeaningful('something.weird')).toBeNull();
+    expect(getVerbColorsIfMeaningful('')).toBeNull();
+  });
+
+  it('mantiene el override del action específico (plugin.operation_failed)', () => {
+    expect(getVerbColorsIfMeaningful('plugin.operation_failed')).toMatchObject({
+      bg: 'var(--red-soft)',
+    });
   });
 });
