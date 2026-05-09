@@ -9,6 +9,7 @@ import { openStream } from '../_shared/lib/open-stream.js';
 import { openTrace } from '../_shared/lib/open-trace.js';
 
 import { getActionVerbColors, getVerbColorsIfMeaningful } from './lib/action-verb.js';
+import { isOtelTraceId } from './lib/request-id-format.js';
 import { MetaSummary } from './meta-summary.js';
 
 const React = getHostReact();
@@ -176,27 +177,29 @@ export function AuditRow({ event, resolveTenantName, views }: AuditRowProps) {
     // ── meta (chips con +N expandible) ──────────────────────────────
     h('td', { style: cell() }, h(MetaSummary, { metadata: event.metadata })),
     // ── acciones row (cross-link a Stream/Trace + copy, on hover) ──
-    // El audit event y los logs/spans del mismo request comparten
-    // `request_id` (que ahora es el OTel `traceId` cuando el request
-    // entró por auto-instrumentation — ver `logger.module.ts:resolveRequestId`).
-    // Esto unifica las cuatro tablas (`audit_events`, `log_entries`,
-    // `log_spans`, `log_issues`) bajo la misma clave de correlación.
+    // Audit y logs/spans del mismo request comparten `request_id` (que
+    // ahora es el OTel `traceId` cuando el request entró por
+    // auto-instrumentation — ver `logger.module.ts:resolveRequestId`).
+    // Las cuatro tablas (`audit_events`, `log_entries`, `log_spans`,
+    // `log_issues`) quedan bajo la misma clave.
     //
-    //   - "abrir en Stream"  → logs operacionales del mismo request
-    //   - "abrir en Trace"   → waterfall completo del request (spans
-    //     incluidos: HTTP, DB queries, NestJS handlers, plugin actions)
+    //   - "abrir Trace"  → waterfall completo (HTTP + DB + NestJS + plugin)
+    //   - "abrir Stream" → logs operacionales del mismo request
     //
-    // Para audits VIEJOS (pre-bridge cls↔OTel) el requestId es UUID y
-    // no matcheará en `log_spans`; en esos casos Trace abre vacío. Es
-    // honesto: los rows nuevos abren la cadena completa, los viejos
-    // muestran que no hay traza.
+    // El botón Trace SOLO aparece si el requestId tiene formato OTel
+    // (32 hex). Para audits viejos pre-bridge (UUID con guiones) o
+    // requests con `x-request-id` custom no-hex, sabemos a priori que
+    // no va a haber spans matching → escondemos el botón en vez de
+    // ofrecer un link a una vista vacía. Stream sigue funcionando para
+    // esos casos: los logs viejos comparten el UUID requestId aunque
+    // los spans no.
     h(
       'td',
       { style: { ...cell(), textAlign: 'right' } },
       h(
         'div',
         { style: { display: 'inline-flex', gap: 4, opacity: hover ? 1 : 0 } },
-        event.requestId
+        event.requestId && isOtelTraceId(event.requestId)
           ? h(
               'button',
               {
