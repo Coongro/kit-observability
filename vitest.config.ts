@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 /**
@@ -11,6 +12,20 @@ export default defineConfig({
   // resuelve PostCSS antes de aplicar la flag de css.
   css: {
     postcss: { plugins: [] },
+  },
+  // Aliaseamos `@coongro/plugin-sdk` a un stub de runtime. Los views (.tsx)
+  // lo importan para `getHostReact()`/`usePlugin()` — en tests unitarios no
+  // ejecutamos esos componentes, pero Vite igual transforma el archivo
+  // contenedor cuando los tests tocan código del mismo dir, y sin alias
+  // tira `Failed to load url @coongro/plugin-sdk`. El stub es minúsculo y
+  // no afecta integration tests (que usan otro config).
+  resolve: {
+    alias: {
+      '@coongro/plugin-sdk': path.resolve(
+        __dirname,
+        'src/test-utils/plugin-sdk.stub.ts'
+      ),
+    },
   },
   test: {
     include: ['src/**/*.test.ts'],

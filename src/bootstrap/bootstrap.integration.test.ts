@@ -14,6 +14,7 @@ import {
 } from '../test-utils/db.js';
 
 import {
+  CREATE_AUDIT_EVENTS_INDEXES_SQL,
   CREATE_LOG_ENTRIES_INDEXES_SQL,
   CREATE_LOG_ENTRIES_SQL,
   CREATE_LOG_ISSUES_INDEXES_SQL,
@@ -92,6 +93,19 @@ describe.skipIf(skipIfNoDb)('runBootstrap (integration)', () => {
     expect(idxNames).toContain('idx_log_issues_status_last_seen');
     expect(idxNames).toContain('idx_audit_events_ts');
     expect(idxNames).toContain('idx_audit_events_tenant_ts');
+    expect(idxNames).toContain('idx_audit_events_request_id');
+  });
+
+  it('audit_events tiene la columna request_id (v3)', async () => {
+    await runBootstrap(sql, silentLogger);
+
+    const cols = await sql.unsafe<{ column_name: string }[]>(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = $2`,
+      [OBSERVABILITY_SCHEMA_NAME, AUDIT_EVENTS_TABLE]
+    );
+    const colNames = new Set(cols.map((c) => c.column_name));
+    expect(colNames).toContain('request_id');
   });
 
   it('declara log_entries y log_spans como PARTITION BY RANGE', async () => {
@@ -128,6 +142,67 @@ describe.skipIf(skipIfNoDb)('runBootstrap (integration)', () => {
         `INSERT INTO "${OBSERVABILITY_SCHEMA_NAME}"."${SCHEMA_VERSION_TABLE}" (id, version) VALUES (2, 99)`
       )
     ).rejects.toThrow();
+  });
+
+  describe('migración v2 → v3', () => {
+    it('agrega request_id a audit_events de un schema en v2', async () => {
+      // Simular un deploy previo en v2: v1 + v2 (audit_events SIN request_id).
+      await sql.unsafe(ENSURE_PGCRYPTO_SQL);
+      await sql.unsafe(CREATE_SCHEMA_SQL);
+      await sql.unsafe(CREATE_SCHEMA_VERSION_SQL);
+      for (const stmt of [CREATE_LOG_ENTRIES_SQL, ...CREATE_LOG_ENTRIES_INDEXES_SQL]) {
+        await sql.unsafe(stmt);
+      }
+      for (const stmt of [CREATE_LOG_SPANS_SQL, ...CREATE_LOG_SPANS_INDEXES_SQL]) {
+        await sql.unsafe(stmt);
+      }
+      for (const stmt of [CREATE_LOG_ISSUES_SQL, ...CREATE_LOG_ISSUES_INDEXES_SQL]) {
+        await sql.unsafe(stmt);
+      }
+      // audit_events v2: shape original SIN request_id
+      await sql.unsafe(`
+        CREATE TABLE "${OBSERVABILITY_SCHEMA_NAME}"."${AUDIT_EVENTS_TABLE}" (
+          id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+          timestamp timestamptz NOT NULL DEFAULT now(),
+          tenant_id uuid,
+          actor_id uuid,
+          action text NOT NULL,
+          entity_type text,
+          entity_id text,
+          metadata jsonb
+        )
+      `);
+      for (const stmt of CREATE_AUDIT_EVENTS_INDEXES_SQL.filter((s) => !s.includes('request_id'))) {
+        await sql.unsafe(stmt);
+      }
+      await writeVersion(sql, 2);
+
+      // Verificar que request_id NO existe todavía
+      const before = await sql.unsafe<{ column_name: string }[]>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = $2 AND column_name = 'request_id'`,
+        [OBSERVABILITY_SCHEMA_NAME, AUDIT_EVENTS_TABLE]
+      );
+      expect(before).toHaveLength(0);
+
+      // Correr bootstrap — debe detectar v2 y migrar a v3
+      await runBootstrap(sql, silentLogger);
+
+      expect(await readVersion(sql)).toBe(SCHEMA_VERSION);
+
+      const after = await sql.unsafe<{ column_name: string }[]>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = $2 AND column_name = 'request_id'`,
+        [OBSERVABILITY_SCHEMA_NAME, AUDIT_EVENTS_TABLE]
+      );
+      expect(after).toHaveLength(1);
+
+      const idx = await sql.unsafe<{ indexname: string }[]>(
+        `SELECT indexname FROM pg_indexes WHERE schemaname = $1 AND indexname = $2`,
+        [OBSERVABILITY_SCHEMA_NAME, 'idx_audit_events_request_id']
+      );
+      expect(idx).toHaveLength(1);
+    });
   });
 
   describe('migración v1 → v2', () => {

@@ -2,9 +2,7 @@ import { LogLevel, type LogEntry } from '@coongro/core-logging';
 import type { Sql } from 'postgres';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { runBootstrap } from '../bootstrap/run-bootstrap.js';
 import { loadConfig } from '../config.js';
-import { registerPartitions } from '../partitions/register.js';
 import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
 import { LOG_ISSUES_TABLE } from '../schema/log-issues.js';
 import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
@@ -12,7 +10,7 @@ import {
   createTestSql,
   getTestDbUrl,
   resetObservabilitySchema,
-  silentLogger,
+  setupObservabilitySchema,
 } from '../test-utils/db.js';
 
 import { DBSink } from './db-sink.js';
@@ -63,8 +61,7 @@ describe.skipIf(skipIfNoDb)('DBSink end-to-end (integration — Milestone 2 acce
   beforeEach(async () => {
     if (sink) await sink.close();
     await resetObservabilitySchema(sql);
-    await runBootstrap(sql, silentLogger);
-    await registerPartitions(sql, baseConfig, silentLogger);
+    await setupObservabilitySchema(sql);
     sink = new DBSink({
       raw: sql,
       batchSize: baseConfig.batchSize,

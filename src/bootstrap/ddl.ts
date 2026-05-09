@@ -107,11 +107,23 @@ CREATE TABLE IF NOT EXISTS "${SCHEMA}"."${AUDIT_EVENTS_TABLE}" (
   action text NOT NULL,
   entity_type text,
   entity_id text,
-  metadata jsonb
+  metadata jsonb,
+  request_id text
 )
 `.trim();
 
 export const CREATE_AUDIT_EVENTS_INDEXES_SQL = [
   `CREATE INDEX IF NOT EXISTS idx_audit_events_ts ON "${SCHEMA}"."${AUDIT_EVENTS_TABLE}" (timestamp)`,
   `CREATE INDEX IF NOT EXISTS idx_audit_events_tenant_ts ON "${SCHEMA}"."${AUDIT_EVENTS_TABLE}" (tenant_id, timestamp)`,
+  `CREATE INDEX IF NOT EXISTS idx_audit_events_request_id ON "${SCHEMA}"."${AUDIT_EVENTS_TABLE}" (request_id)`,
 ];
+
+// Migración v2→v3: agrega request_id a audit_events. Idempotente vía IF NOT
+// EXISTS — schemas creados en v3+ ya tienen la columna desde el CREATE TABLE
+// de arriba, así que el ALTER es no-op para deploys nuevos.
+export const ADD_AUDIT_EVENTS_REQUEST_ID_SQL = `
+ALTER TABLE "${SCHEMA}"."${AUDIT_EVENTS_TABLE}"
+  ADD COLUMN IF NOT EXISTS request_id text
+`.trim();
+
+export const ADD_AUDIT_EVENTS_REQUEST_ID_INDEX_SQL = `CREATE INDEX IF NOT EXISTS idx_audit_events_request_id ON "${SCHEMA}"."${AUDIT_EVENTS_TABLE}" (request_id)`;

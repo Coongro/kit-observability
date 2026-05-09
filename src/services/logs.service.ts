@@ -13,11 +13,14 @@ export async function queryLogsService(filters: LogQueryFilters): Promise<LogQue
 
 export interface FrontendErrorInput {
   message: string;
+  /** tenantId del JWT — required para impedir forging cross-tenant. */
+  tenantId: string;
+  /** user.id del JWT (WordPress user_id, numérico). Se persiste en context.actorId. */
+  actorId: string | number;
   level?: number;
   stack?: string;
   url?: string;
   userAgent?: string;
-  tenantId?: string;
 }
 
 export function ingestFrontendError(input: FrontendErrorInput): void {
@@ -29,6 +32,7 @@ export function ingestFrontendError(input: FrontendErrorInput): void {
     name: 'frontend',
     context: {
       tenantId: input.tenantId,
+      actorId: input.actorId,
       url: input.url,
       userAgent: input.userAgent,
     },
