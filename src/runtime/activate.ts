@@ -1,4 +1,4 @@
-import { addSink, getSink } from '@coongro/core-logging';
+import { addSink, getSink, setAuditRecorder } from '@coongro/core-logging';
 import type { ModuleActivationContext } from '@coongro/module-core';
 
 import { AuditLog } from '../audit/index.js';
@@ -115,16 +115,25 @@ export async function activate(context: ModuleActivationContext): Promise<void> 
     context.api.addSpanProcessor?.(activeSpanSink);
   }
 
+  const auditLog = new AuditLog(systemDb, logger);
   setRuntimeState({
     systemDb,
     config,
     dbSink: activeSink,
     spanSink: activeSpanSink,
-    auditLog: new AuditLog(systemDb, logger),
+    auditLog,
     removeSpanProcessor: context.api.removeSpanProcessor
       ? (p) => context.api.removeSpanProcessor(p)
       : undefined,
   });
+
+  // Registrar el AuditLog como recorder global de @coongro/core-logging para
+  // que el core (action listeners, auth, tenants) pueda emitir audit events
+  // sin depender directo de este plugin. Idempotente por la misma referencia
+  // — en hot-reload la 2da llamada con el mismo objeto es silenciosa.
+  // Si en algún momento queremos cleanup en deactivate(), llamar
+  // `clearAuditRecorder()`. Por ahora no hay deactivate hook en este plugin.
+  setAuditRecorder(auditLog);
   logger.info('kit-observability activated', {
     dbSinkId: activeSink.id,
     spanSinkId: activeSpanSink.id,

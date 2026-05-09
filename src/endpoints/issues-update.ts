@@ -22,10 +22,7 @@ export async function updateIssue(context: HttpEndpointContext): Promise<unknown
 
   const { found } = await patchIssueStatus(id, body.status, {
     tenantId: context.user?.tenantId,
-    actorId:
-      context.user?.id !== undefined && context.user.id !== null
-        ? String(context.user.id)
-        : undefined,
+    actorId: context.user?.id ?? undefined,
   });
   if (!found) return notFound(`Issue ${id} not found`);
 

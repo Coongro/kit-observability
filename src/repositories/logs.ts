@@ -2,12 +2,27 @@ import type { Sql } from 'postgres';
 
 import { OBSERVABILITY_SCHEMA_NAME } from '../schema/index.js';
 
+import { where } from './_lib/sql-filters.js';
+
 const ENTRIES_TABLE = `"${OBSERVABILITY_SCHEMA_NAME}"."log_entries"`;
 
 export interface LogQueryFilters {
-  level?: number;
+  /**
+   * Filtra por uno o más niveles. Acepta array para que el Stream pueda
+   * pedir "warn + error" en una sola query (antes el backend solo aceptaba
+   * level único, lo que forzaba al frontend a fetch-all + filter-client —
+   * y rompía cuando los logs recientes no incluían los niveles pedidos).
+   */
+  levels?: number[];
   source?: string;
   tenantId?: string;
+  /**
+   * Filtra por `request_id` exacto. Es la pieza central del Stream view
+   * (hero filter "seguir request_id") porque buscar la cadena completa
+   * de un request es lo más útil al debuggear — pero se aplica a través
+   * del filtro en el endpoint, NO con `q` (que hace ILIKE en `message`).
+   */
+  requestId?: string;
   from?: string;
   to?: string;
   q?: string;
@@ -37,48 +52,27 @@ export interface LogQueryResult {
 }
 
 export async function queryLogs(raw: Sql, filters: LogQueryFilters): Promise<LogQueryResult> {
-  const conditions: string[] = [];
-  const params: (string | number)[] = [];
-  let idx = 1;
-
-  if (filters.level !== undefined) {
-    conditions.push(`level = $${idx++}`);
-    params.push(filters.level);
-  }
-  if (filters.source) {
-    conditions.push(`source = $${idx++}`);
-    params.push(filters.source);
-  }
-  if (filters.tenantId) {
-    conditions.push(`tenant_id = $${idx++}::uuid`);
-    params.push(filters.tenantId);
-  }
-  if (filters.from) {
-    conditions.push(`timestamp >= $${idx++}::timestamptz`);
-    params.push(filters.from);
-  }
-  if (filters.to) {
-    conditions.push(`timestamp <= $${idx++}::timestamptz`);
-    params.push(filters.to);
-  }
-  if (filters.q) {
-    conditions.push(`message ILIKE $${idx++}`);
-    params.push(`%${filters.q}%`);
-  }
-
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const { whereClause, params, nextIdx } = where()
+    .inList('level', filters.levels)
+    .eq('source', filters.source)
+    .eq('tenant_id', filters.tenantId, { cast: 'uuid' })
+    .eq('request_id', filters.requestId)
+    .gte('timestamp', filters.from, { cast: 'timestamptz' })
+    .lte('timestamp', filters.to, { cast: 'timestamptz' })
+    .ilike('message', filters.q)
+    .build();
 
   const [countRows, entries] = await Promise.all([
     raw.unsafe<{ count: string }[]>(
-      `SELECT COUNT(*) AS count FROM ${ENTRIES_TABLE} ${where}`,
+      `SELECT COUNT(*) AS count FROM ${ENTRIES_TABLE} ${whereClause}`,
       params
     ),
     raw.unsafe<LogEntryRecord[]>(
       `SELECT id, timestamp, tenant_id, request_id, level, source, message,
               context, metadata, error, fingerprint
-       FROM ${ENTRIES_TABLE} ${where}
+       FROM ${ENTRIES_TABLE} ${whereClause}
        ORDER BY timestamp DESC
-       LIMIT $${idx++} OFFSET $${idx++}`,
+       LIMIT $${nextIdx} OFFSET $${nextIdx + 1}`,
       [...params, filters.limit, filters.offset]
     ),
   ]);

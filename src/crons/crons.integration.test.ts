@@ -111,9 +111,16 @@ describe.skipIf(skipIfNoDb)('runRetention (integration — COONG-145 acceptance)
   beforeEach(async () => {
     await resetObservabilitySchema(sql);
     await runBootstrap(sql, silentLogger);
-    // Las particiones del pasado se crean ANTES de registerPartitions para evitar
-    // solapamiento con las particiones backward que pg_partman crea automáticamente
-    // (típicamente 1-2 días atrás). Ir 7 días atrás garantiza rango disjunto.
+    // Este suite NO usa setupObservabilitySchema porque cada test llama
+    // registerPartitions con un config distinto (retentions, premake). Como
+    // PartitionManager.register() es idempotente sobre part_config, una
+    // segunda llamada con config diferente NO actualiza la fila — entonces
+    // tenemos que dejar que cada test sea el primero en registrar.
+    //
+    // Las particiones del pasado se crean ANTES de registerPartitions para
+    // evitar solapamiento con las particiones backward que pg_partman crea
+    // automáticamente (típicamente 1-2 días atrás). Ir 7 días atrás garantiza
+    // rango disjunto.
     await createPastPartition(sql, LOG_ENTRIES_TABLE, 7);
     await createPastPartition(sql, LOG_SPANS_TABLE, 7);
   });
@@ -281,6 +288,8 @@ describe.skipIf(skipIfNoDb)('runMaintenance (integration — COONG-145 acceptanc
   beforeEach(async () => {
     await resetObservabilitySchema(sql);
     await runBootstrap(sql, silentLogger);
+    // Mismo razonamiento que el suite de runRetention: cada test llama
+    // registerPartitions con su propio premake/retention.
   });
 
   it('garantiza ≥7 particiones futuras en log_entries tras registration + maintenance con premake=7', async () => {

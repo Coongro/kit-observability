@@ -10,18 +10,13 @@ import {
 import { computeFingerprint } from '../fingerprinting/compute-fingerprint.js';
 import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
 import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
+import { toUuidOrNull } from '../utils/uuid.js';
 
 import { SinkBase, type SinkBaseOptions } from './sink-base.js';
 
 const ENTRIES_TABLE = `"${OBSERVABILITY_SCHEMA_NAME}"."${LOG_ENTRIES_TABLE}"`;
 
 const SINK_ID = '@coongro/kit-observability:db';
-
-// Shape 8-4-4-4-12 hex. Match relaxed (no version/variant bits chequeados)
-// porque Postgres acepta cualquier UUID con este shape, y los tests/scripts
-// sintéticos suelen usar patrones tipo `11111111-2222-3333-4444-555555555555`
-// que no respetan version/variant pero son válidos para la columna `uuid`.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Sink que persiste log entries a PostgreSQL.
@@ -160,7 +155,14 @@ interface EnrichedEntry {
 function enrichEntry(entry: LogEntry): EnrichedEntry {
   const tenantId = extractUuidField(entry.context, 'tenantId');
   const requestId = extractStringField(entry.context, 'requestId');
-  const source = entry.name ?? 'app';
+  // Prioridad: context.source (convención usada en apps/api: cada servicio
+  // hace `rootLogger.child({ source: MyService.name })`) → entry.name
+  // (Pino root logger name, raramente cambiado por servicio) → 'app'.
+  // El comportamiento previo solo leía `entry.name`, lo que hacía que TODOS
+  // los logs de servicios apareciesen como source='app' aunque el caller
+  // hubiera anotado el source — el filtro por source en Stream/Issues era
+  // útil solo para distinguir core vs plugins, no entre servicios.
+  const source = extractStringField(entry.context, 'source') ?? entry.name ?? 'app';
   const topFrame = extractTopFrame(entry);
   const fingerprint = computeFingerprint({
     level: entry.level,
@@ -205,9 +207,7 @@ function extractStringField(obj: Record<string, unknown> | undefined, key: strin
  * válidos al fail-safe. Filtrar acá los degrada a tenant_id=NULL en vez.
  */
 function extractUuidField(obj: Record<string, unknown> | undefined, key: string): string | null {
-  const raw = extractStringField(obj, key);
-  if (raw === null) return null;
-  return UUID_RE.test(raw) ? raw : null;
+  return toUuidOrNull(extractStringField(obj, key));
 }
 
 function extractTopFrame(entry: LogEntry): string | null {

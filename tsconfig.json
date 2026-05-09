@@ -43,6 +43,12 @@
       "@coongro/database-core/*": [
         "../../packages/database-core/dist/*"
       ],
+      "@coongro/datetime": [
+        "../../packages/datetime/dist/index.d.ts"
+      ],
+      "@coongro/datetime/*": [
+        "../../packages/datetime/dist/*"
+      ],
       "@coongro/module-core": [
         "../../packages/module-core/dist/index.d.ts"
       ],
