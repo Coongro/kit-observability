@@ -216,11 +216,16 @@ export function AuditRow({ event, resolveTenantName, views }: AuditRowProps) {
               'button',
               {
                 type: 'button',
-                onClick: () =>
-                  openStream(views, {
-                    requestId: event.requestId,
-                    tenantId: event.tenantId,
-                  }),
+                // requestId solo, sin tenantId. Razón: endpoints que
+                // emiten audit pero NO pasan por JwtAuthGuard (ej.
+                // /dev/auth/login: endpoint que ISSUES el JWT, no
+                // puede requerir uno) escriben log_entries con
+                // tenant_id NULL aunque el audit posterior sí tenga
+                // tenantId del payload. Filtrar por tenantId AND
+                // requestId excluiría esos logs vía mismatch NULL≠UUID,
+                // dejando Stream vacío. requestId es único por request
+                // — el tenant se ve igual en cada fila.
+                onClick: () => openStream(views, { requestId: event.requestId }),
                 title: 'abrir Stream (logs del mismo request)',
                 style: iconButtonStyle(),
               },
