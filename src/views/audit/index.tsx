@@ -42,7 +42,7 @@ const RANGE_TO_FROM: Record<AuditFilters['range'], () => string | undefined> = {
 };
 
 export function AuditView() {
-  const { toast } = usePlugin();
+  const { toast, views } = usePlugin();
   const [filters, setFilters] = useState<AuditFilters>(DEFAULT_AUDIT_FILTERS);
   // Pre-cargado al mount; el lookup `id → name` queda síncrono dentro
   // del row component. Se loadea en paralelo con la query de audit
@@ -139,7 +139,7 @@ export function AuditView() {
       { style: { flex: 1, minHeight: 0, overflow: 'auto', background: 'var(--white)' } },
       error
         ? h(InlineError, { error, onRetry: () => void refetch() })
-        : h(AuditTable, { events, loading, resolveTenantName: tenantNameMap.get })
+        : h(AuditTable, { events, loading, resolveTenantName: tenantNameMap.get, views })
     ),
     h(ResultsBar, {
       count: events.length,
@@ -155,9 +155,10 @@ interface AuditTableProps {
   events: AuditEvent[];
   loading: boolean;
   resolveTenantName: (tenantId: string) => string | undefined;
+  views: ReturnType<typeof usePlugin>['views'];
 }
 
-function AuditTable({ events, loading, resolveTenantName }: AuditTableProps) {
+function AuditTable({ events, loading, resolveTenantName, views }: AuditTableProps) {
   return h(
     'table',
     { style: { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' } },
@@ -194,7 +195,7 @@ function AuditTable({ events, loading, resolveTenantName }: AuditTableProps) {
     h(
       'tbody',
       null,
-      ...events.map((e) => h(AuditRow, { key: e.id, event: e, resolveTenantName })),
+      ...events.map((e) => h(AuditRow, { key: e.id, event: e, resolveTenantName, views })),
       events.length === 0 && !loading
         ? h(
             'tr',

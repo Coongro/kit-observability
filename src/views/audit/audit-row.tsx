@@ -1,9 +1,11 @@
-import { getHostReact } from '@coongro/plugin-sdk';
+import { getHostReact, type usePlugin } from '@coongro/plugin-sdk';
 
 import type { AuditEvent } from '../_shared/api.js';
 import { CopyBtn } from '../_shared/components/copy-btn.js';
+import { ObsIcon } from '../_shared/components/icons.js';
 import { shortenId } from '../_shared/lib/format-id.js';
 import { absTime, relTime } from '../_shared/lib/format-time.js';
+import { openStream } from '../_shared/lib/open-stream.js';
 
 import { getActionVerbColors, getVerbColorsIfMeaningful } from './lib/action-verb.js';
 import { MetaSummary } from './meta-summary.js';
@@ -21,9 +23,15 @@ export interface AuditRowProps {
    * `/tenants` por cada repaint de la tabla.
    */
   resolveTenantName: (tenantId: string) => string | undefined;
+  /**
+   * API de navegación entre vistas del plugin. Se inyecta desde el padre
+   * (un solo `usePlugin()` en `AuditView`) para que las N filas de la
+   * tabla no llamen el hook cada una.
+   */
+  views: ReturnType<typeof usePlugin>['views'];
 }
 
-export function AuditRow({ event, resolveTenantName }: AuditRowProps) {
+export function AuditRow({ event, resolveTenantName, views }: AuditRowProps) {
   const [hover, setHover] = useState(false);
   const verbColors = getActionVerbColors(event.action);
   const targetLabel = formatTarget(event.entityType, event.entityId);
@@ -166,17 +174,60 @@ export function AuditRow({ event, resolveTenantName }: AuditRowProps) {
     ),
     // ── meta (chips con +N expandible) ──────────────────────────────
     h('td', { style: cell() }, h(MetaSummary, { metadata: event.metadata })),
-    // ── acciones row (copy on hover) ────────────────────────────────
+    // ── acciones row (cross-link a Stream + copy, on hover) ────────
+    // El audit event y los logs operacionales del mismo request comparten
+    // `request_id` (cls.getId) — cliquear "abrir en Stream" carga la
+    // vista filtrada por requestId+tenantId, dando el contexto de "qué
+    // más pasó en el mismo request" que un investigador típicamente
+    // quiere después de ver un evento de auditoría.
+    //
+    // NOTA: la vista Trace usa el `trace_id` de OTel (hex de 32 chars),
+    // que NO coincide con el `request_id` del cls (UUID con guiones).
+    // Por eso NO exponemos "abrir Trace" desde audit todavía — sería un
+    // link roto. Cuando bridgemos cls.idGenerator con OTel context,
+    // sumar acá un segundo botón y openTrace(views, event.requestId).
     h(
       'td',
       { style: { ...cell(), textAlign: 'right' } },
       h(
         'div',
-        { style: { opacity: hover ? 1 : 0 } },
+        {
+          style: { display: 'inline-flex', gap: 4, opacity: hover ? 1 : 0 },
+        },
+        event.requestId
+          ? h(
+              'button',
+              {
+                type: 'button',
+                onClick: () =>
+                  openStream(views, {
+                    requestId: event.requestId,
+                    tenantId: event.tenantId,
+                  }),
+                title: 'abrir en Stream (mismo request_id)',
+                style: iconButtonStyle(),
+              },
+              h(ObsIcon, { name: 'external', size: 12 })
+            )
+          : null,
         h(CopyBtn, { value: event, label: 'copiar evento', size: 12 })
       )
     )
   );
+}
+
+function iconButtonStyle(): React.CSSProperties {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'var(--neutral-700)',
+    borderRadius: 3,
+  };
 }
 
 interface ActorCellProps {

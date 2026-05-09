@@ -176,6 +176,13 @@ export interface WireAuditEvent {
   entityType: string | null;
   entityId: string | null;
   metadata: unknown;
+  /**
+   * Correlation id del request HTTP que originó el audit event. Comparte
+   * valor con `log_entries.request_id` para joins/filtros cross-tabla.
+   * Null cuando el audit ocurrió fuera de un request HTTP (cron, boot,
+   * lifecycle hooks).
+   */
+  requestId: string | null;
 }
 
 export interface WireQueryAuditResult {
