@@ -6,6 +6,7 @@ import { ObsIcon } from '../_shared/components/icons.js';
 import { shortenId } from '../_shared/lib/format-id.js';
 import { absTime, relTime } from '../_shared/lib/format-time.js';
 import { openStream } from '../_shared/lib/open-stream.js';
+import { openTrace } from '../_shared/lib/open-trace.js';
 
 import { getActionVerbColors, getVerbColorsIfMeaningful } from './lib/action-verb.js';
 import { MetaSummary } from './meta-summary.js';
@@ -174,26 +175,39 @@ export function AuditRow({ event, resolveTenantName, views }: AuditRowProps) {
     ),
     // ── meta (chips con +N expandible) ──────────────────────────────
     h('td', { style: cell() }, h(MetaSummary, { metadata: event.metadata })),
-    // ── acciones row (cross-link a Stream + copy, on hover) ────────
-    // El audit event y los logs operacionales del mismo request comparten
-    // `request_id` (cls.getId) — cliquear "abrir en Stream" carga la
-    // vista filtrada por requestId+tenantId, dando el contexto de "qué
-    // más pasó en el mismo request" que un investigador típicamente
-    // quiere después de ver un evento de auditoría.
+    // ── acciones row (cross-link a Stream/Trace + copy, on hover) ──
+    // El audit event y los logs/spans del mismo request comparten
+    // `request_id` (que ahora es el OTel `traceId` cuando el request
+    // entró por auto-instrumentation — ver `logger.module.ts:resolveRequestId`).
+    // Esto unifica las cuatro tablas (`audit_events`, `log_entries`,
+    // `log_spans`, `log_issues`) bajo la misma clave de correlación.
     //
-    // NOTA: la vista Trace usa el `trace_id` de OTel (hex de 32 chars),
-    // que NO coincide con el `request_id` del cls (UUID con guiones).
-    // Por eso NO exponemos "abrir Trace" desde audit todavía — sería un
-    // link roto. Cuando bridgemos cls.idGenerator con OTel context,
-    // sumar acá un segundo botón y openTrace(views, event.requestId).
+    //   - "abrir en Stream"  → logs operacionales del mismo request
+    //   - "abrir en Trace"   → waterfall completo del request (spans
+    //     incluidos: HTTP, DB queries, NestJS handlers, plugin actions)
+    //
+    // Para audits VIEJOS (pre-bridge cls↔OTel) el requestId es UUID y
+    // no matcheará en `log_spans`; en esos casos Trace abre vacío. Es
+    // honesto: los rows nuevos abren la cadena completa, los viejos
+    // muestran que no hay traza.
     h(
       'td',
       { style: { ...cell(), textAlign: 'right' } },
       h(
         'div',
-        {
-          style: { display: 'inline-flex', gap: 4, opacity: hover ? 1 : 0 },
-        },
+        { style: { display: 'inline-flex', gap: 4, opacity: hover ? 1 : 0 } },
+        event.requestId
+          ? h(
+              'button',
+              {
+                type: 'button',
+                onClick: () => openTrace(views, event.requestId),
+                title: 'abrir Trace (waterfall del mismo request)',
+                style: iconButtonStyle(),
+              },
+              h(ObsIcon, { name: 'activity', size: 12 })
+            )
+          : null,
         event.requestId
           ? h(
               'button',
@@ -204,7 +218,7 @@ export function AuditRow({ event, resolveTenantName, views }: AuditRowProps) {
                     requestId: event.requestId,
                     tenantId: event.tenantId,
                   }),
-                title: 'abrir en Stream (mismo request_id)',
+                title: 'abrir Stream (logs del mismo request)',
                 style: iconButtonStyle(),
               },
               h(ObsIcon, { name: 'external', size: 12 })
