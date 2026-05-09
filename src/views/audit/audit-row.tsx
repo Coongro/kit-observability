@@ -6,6 +6,7 @@ import { shortenId } from '../_shared/lib/format-id.js';
 import { absTime, relTime } from '../_shared/lib/format-time.js';
 
 import { getActionVerbColors } from './lib/action-verb.js';
+import { MetaSummary } from './meta-summary.js';
 
 const React = getHostReact();
 const h = React.createElement;
@@ -13,12 +14,20 @@ const { useState } = React;
 
 export interface AuditRowProps {
   event: AuditEvent;
+  /**
+   * Resolver `tenantId → tenant name` provisto por el view padre. Devolver
+   * `undefined` para tenants no conocidos — la celda cae al UUID corto.
+   * Pasarlo como prop (en vez de fetchear per-row) evita N peticiones a
+   * `/tenants` por cada repaint de la tabla.
+   */
+  resolveTenantName: (tenantId: string) => string | undefined;
 }
 
-export function AuditRow({ event }: AuditRowProps) {
+export function AuditRow({ event, resolveTenantName }: AuditRowProps) {
   const [hover, setHover] = useState(false);
   const verbColors = getActionVerbColors(event.action);
   const targetLabel = formatTarget(event.entityType, event.entityId);
+  const tenantName = event.tenantId ? resolveTenantName(event.tenantId) : undefined;
 
   return h(
     'tr',
@@ -30,6 +39,7 @@ export function AuditRow({ event }: AuditRowProps) {
         borderBottom: '0.5px solid var(--neutral-300)',
       },
     },
+    // ── timestamp ────────────────────────────────────────────────────
     h(
       'td',
       { style: cell() },
@@ -51,11 +61,15 @@ export function AuditRow({ event }: AuditRowProps) {
         relTime(event.timestamp)
       )
     ),
+    // ── actor (con tenant name como contexto secundario) ────────────
     h(
       'td',
       { style: cell() },
       event.actorId
-        ? h(ActorCell, { actorId: event.actorId })
+        ? h(ActorCell, {
+            actorId: event.actorId,
+            tenantName,
+          })
         : h(
             'span',
             {
@@ -64,6 +78,7 @@ export function AuditRow({ event }: AuditRowProps) {
             'system'
           )
     ),
+    // ── action (con color por verbo) ─────────────────────────────────
     h(
       'td',
       { style: cell() },
@@ -79,11 +94,14 @@ export function AuditRow({ event }: AuditRowProps) {
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
             fontWeight: 500,
+            // Permite que actions largas wrappen sin desbordar el chip.
+            wordBreak: 'break-all',
           },
         },
         event.action
       )
     ),
+    // ── target (wrap permitido, sin elipsis) ────────────────────────
     h(
       'td',
       { style: cell() },
@@ -102,9 +120,12 @@ export function AuditRow({ event }: AuditRowProps) {
                 fontSize: 11,
                 color: 'var(--neutral-950)',
                 maxWidth: '100%',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                // Multi-line wrap para entityIds largos (UUIDs, slug+id):
+                // `wordBreak: break-all` permite cortar dentro de la
+                // palabra; sin esto las strings sin espacios desbordan
+                // el ancho del chip.
+                whiteSpace: 'normal',
+                wordBreak: 'break-all',
               },
             },
             targetLabel,
@@ -118,17 +139,12 @@ export function AuditRow({ event }: AuditRowProps) {
             '—'
           )
     ),
+    // ── tenant (nombre arriba, UUID corto abajo) ────────────────────
     h(
       'td',
       { style: cell() },
       event.tenantId
-        ? h(
-            'span',
-            {
-              style: { fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--neutral-700)' },
-            },
-            shortenId(event.tenantId)
-          )
+        ? h(TenantCell, { tenantId: event.tenantId, tenantName })
         : h(
             'span',
             {
@@ -137,7 +153,9 @@ export function AuditRow({ event }: AuditRowProps) {
             'system'
           )
     ),
+    // ── meta (chips con +N expandible) ──────────────────────────────
     h('td', { style: cell() }, h(MetaSummary, { metadata: event.metadata })),
+    // ── acciones row (copy on hover) ────────────────────────────────
     h(
       'td',
       { style: { ...cell(), textAlign: 'right' } },
@@ -150,7 +168,12 @@ export function AuditRow({ event }: AuditRowProps) {
   );
 }
 
-function ActorCell({ actorId }: { actorId: string }) {
+interface ActorCellProps {
+  actorId: string;
+  tenantName: string | undefined;
+}
+
+function ActorCell({ actorId, tenantName }: ActorCellProps) {
   return h(
     'div',
     { style: { display: 'flex', alignItems: 'center', gap: 8 } },
@@ -173,83 +196,104 @@ function ActorCell({ actorId }: { actorId: string }) {
         },
       },
       // Iniciales placeholder hasta que tengamos un endpoint de users; los
-      // primeros 2 hex chars del UUID son visualmente distintivos.
+      // primeros 2 chars del id son visualmente distintivos para UUIDs
+      // y para numeric ids (WP user_id `1001` → `10`).
       actorId.slice(0, 2).toUpperCase()
     ),
     h(
       'div',
-      null,
+      // minWidth: 0 evita que el grid hijo desborde el flex container
+      // cuando el tenant name es largo.
+      { style: { minWidth: 0 } },
       h(
         'div',
-        { style: { fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--neutral-950)' } },
+        {
+          style: {
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11.5,
+            color: 'var(--neutral-950)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          },
+        },
         shortenId(actorId)
-      )
+      ),
+      // Línea secundaria: nombre del tenant si existe (contexto del actor).
+      // Con esto, "user 1001 acting on tenant Acme Vet" queda claro de
+      // un vistazo aunque el sub del JWT sea solo numeric.
+      tenantName
+        ? h(
+            'div',
+            {
+              style: {
+                fontFamily: 'var(--font-sans)',
+                fontSize: 10.5,
+                color: 'var(--neutral-500)',
+                marginTop: 1,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              },
+              title: tenantName,
+            },
+            tenantName
+          )
+        : null
     )
   );
 }
 
-function MetaSummary({ metadata }: { metadata: unknown }) {
-  if (metadata === null || metadata === undefined || typeof metadata !== 'object') {
+interface TenantCellProps {
+  tenantId: string;
+  tenantName: string | undefined;
+}
+
+function TenantCell({ tenantId, tenantName }: TenantCellProps) {
+  // Si no resolvemos el name, mostramos solo UUID corto — fallback honesto
+  // mientras /tenants carga o si el tenant fue borrado.
+  if (!tenantName) {
     return h(
       'span',
-      { style: { fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--neutral-500)' } },
-      '—'
-    );
-  }
-  const entries = Object.entries(metadata as Record<string, unknown>);
-  if (entries.length === 0) {
-    return h(
-      'span',
-      { style: { fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--neutral-500)' } },
-      '—'
+      {
+        style: { fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--neutral-700)' },
+        title: tenantId,
+      },
+      shortenId(tenantId)
     );
   }
   return h(
     'div',
-    { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
-    ...entries.slice(0, 3).map(([k, v]) =>
-      h(
-        'span',
-        {
-          key: k,
-          style: {
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '1px 6px',
-            borderRadius: 3,
-            background: 'var(--neutral-100)',
-            border: '0.5px solid var(--neutral-300)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10.5,
-          },
+    { style: { display: 'flex', flexDirection: 'column', minWidth: 0 } },
+    h(
+      'div',
+      {
+        style: {
+          fontFamily: 'var(--font-sans)',
+          fontSize: 12.5,
+          color: 'var(--neutral-950)',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
         },
-        h('span', { style: { color: 'var(--neutral-500)' } }, k),
-        h('span', { style: { color: 'var(--neutral-950)' } }, formatMetaValue(v))
-      )
+        title: tenantName,
+      },
+      tenantName
     ),
-    entries.length > 3
-      ? h(
-          'span',
-          {
-            style: {
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10.5,
-              color: 'var(--neutral-500)',
-            },
-          },
-          `+${entries.length - 3}`
-        )
-      : null
+    h(
+      'div',
+      {
+        style: {
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10.5,
+          color: 'var(--neutral-500)',
+          marginTop: 1,
+        },
+        title: tenantId,
+      },
+      shortenId(tenantId)
+    )
   );
-}
-
-function formatMetaValue(v: unknown): string {
-  if (v === null || v === undefined) return 'null';
-  if (Array.isArray(v)) return `[${v.length}]`;
-  if (typeof v === 'object') return '{…}';
-  if (typeof v === 'string') return v.length > 24 ? `${v.slice(0, 24)}…` : v;
-  return String(v);
 }
 
 function formatTarget(entityType: string | null, entityId: string | null): string | null {

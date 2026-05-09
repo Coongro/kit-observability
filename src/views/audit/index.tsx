@@ -25,6 +25,7 @@ import { useFetch } from '../_shared/use-fetch.js';
 
 import { AuditRow } from './audit-row.js';
 import { AuditFilterBar, DEFAULT_AUDIT_FILTERS, type AuditFilters } from './filter-bar.js';
+import { useTenantNameMap } from './lib/use-tenant-name-map.js';
 
 const React = getHostReact();
 const h = React.createElement;
@@ -43,6 +44,10 @@ const RANGE_TO_FROM: Record<AuditFilters['range'], () => string | undefined> = {
 export function AuditView() {
   const { toast } = usePlugin();
   const [filters, setFilters] = useState<AuditFilters>(DEFAULT_AUDIT_FILTERS);
+  // Pre-cargado al mount; el lookup `id → name` queda síncrono dentro
+  // del row component. Se loadea en paralelo con la query de audit
+  // events — una pestaña que se loadea con la otra no penaliza TTFC.
+  const tenantNameMap = useTenantNameMap();
 
   const fetchArgs = useMemo(
     () => ({
@@ -134,7 +139,7 @@ export function AuditView() {
       { style: { flex: 1, minHeight: 0, overflow: 'auto', background: 'var(--white)' } },
       error
         ? h(InlineError, { error, onRetry: () => void refetch() })
-        : h(AuditTable, { events, loading })
+        : h(AuditTable, { events, loading, resolveTenantName: tenantNameMap.get })
     ),
     h(ResultsBar, {
       count: events.length,
@@ -149,22 +154,27 @@ export function AuditView() {
 interface AuditTableProps {
   events: AuditEvent[];
   loading: boolean;
+  resolveTenantName: (tenantId: string) => string | undefined;
 }
 
-function AuditTable({ events, loading }: AuditTableProps) {
+function AuditTable({ events, loading, resolveTenantName }: AuditTableProps) {
   return h(
     'table',
     { style: { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' } },
+    // Anchos por columna. `target` y `meta` tienen contenido variable;
+    // las dejamos respirar dejando target sin width fijo (auto) y meta
+    // con flex (sin width). El resto sí fijo para que la tabla se vea
+    // estable a escalas distintas.
     h(
       'colgroup',
       null,
-      h('col', { style: { width: 180 } }),
-      h('col', { style: { width: 200 } }),
-      h('col', { style: { width: 220 } }),
-      h('col', { style: { width: 220 } }),
-      h('col', { style: { width: 140 } }),
-      h('col'),
-      h('col', { style: { width: 60 } })
+      h('col', { style: { width: 180 } }), // timestamp
+      h('col', { style: { width: 220 } }), // actor
+      h('col', { style: { width: 200 } }), // action
+      h('col', { style: { minWidth: 200 } }), // target — wrap, sin tope hard
+      h('col', { style: { width: 200 } }), // tenant (name + uuid)
+      h('col'), // meta — flexible
+      h('col', { style: { width: 60 } }) // copy
     ),
     h(
       'thead',
@@ -184,7 +194,7 @@ function AuditTable({ events, loading }: AuditTableProps) {
     h(
       'tbody',
       null,
-      ...events.map((e) => h(AuditRow, { key: e.id, event: e })),
+      ...events.map((e) => h(AuditRow, { key: e.id, event: e, resolveTenantName })),
       events.length === 0 && !loading
         ? h(
             'tr',
