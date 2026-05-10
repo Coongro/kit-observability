@@ -1,6 +1,6 @@
 {
   "name": "@coongro/kit-observability",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "type": "module",
   "description": "Sistema propio de observability: logs estructurados, traces y agregación de issues. Reemplaza Winston en el API y expone HTTP endpoints + MCP tools para query.",
   "main": "dist/index.js",
@@ -23,17 +23,19 @@
   ],
   "scripts": {
     "prepare": "husky",
-    "build": "npm run build:css && npm run copy:fontawesome && tsc",
-    "build:css": "tailwindcss -c tailwind.config.cjs -i ./src/styles/tailwind.css -o ./dist/assets/tailwind.css --minify",
-    "copy:fontawesome": "node scripts/copy-fontawesome.cjs",
-    "dev": "npm run build:css && tsc --watch",
+    "build": "tsc -p tsconfig.build.json && npm run copy:assets",
+    "copy:assets": "node scripts/copy-assets.cjs",
+    "dev": "npm run copy:assets && tsc --watch",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
-    "quality": "npm run typecheck && npm run format:check && npm run lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "quality": "npm run typecheck && npm run format:check && npm run lint && npm run test",
     "quality:fix": "npm run format && npm run lint:fix",
     "sync-version": "node scripts/sync-version.cjs",
     "version": "npm run sync-version && git add coongro.manifest.json",
@@ -43,22 +45,33 @@
     "node": ">=18.0.0"
   },
   "peerDependencies": {
-    "@coongro/plugin-sdk": ">=0.1.0"
+    "@coongro/plugin-sdk": ">=0.1.0",
+    "@coongro/core-logging": ">=0.41.0",
+    "@coongro/database-core": ">=0.41.0",
+    "@coongro/datetime": ">=0.43.0",
+    "@coongro/module-core": ">=0.41.0"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",
     "@coongro/plugin-sdk": ">=0.14.0",
+    "@coongro/core-logging": ">=0.41.0",
+    "@coongro/database-core": ">=0.41.0",
+    "@coongro/datetime": ">=0.43.0",
+    "@coongro/module-core": ">=0.41.0",
+    "@opentelemetry/sdk-trace-base": "^2.7.1",
+    "@types/node": "^20.11.5",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
+    "drizzle-kit": "^0.30.0",
+    "drizzle-orm": "^0.38.3",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-import": "^2.29.1",
     "eslint-plugin-sonarjs": "^0.24.0",
     "husky": "^9.0.0",
+    "postgres": "^3.4.5",
     "prettier": "^3.2.5",
-    "tailwindcss": "^3.4.0",
     "typescript": "^5.3.0",
-    "drizzle-orm": "^0.38.3",
-    "@fortawesome/fontawesome-free": "^6.5.0"
+    "vitest": "^2.1.8"
   }
 }

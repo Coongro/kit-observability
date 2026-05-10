@@ -1,17 +1,194 @@
 {
   "id": "kit-observability",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "apiVersion": "2.0",
   "runtime": "eager",
+  "entry": "./dist/server.js",
+  "initView": "kit-observability.issues.open",
   "assets": {
     "styles": [
-      "./dist/assets/tailwind.css",
-      "./dist/assets/fontawesome/css/all.min.css"
+      "./dist/assets/observability.css"
     ]
   },
   "contributes": {
-    "menus": [],
-    "views": [],
-    "repositories": []
+    "menus": [
+      {
+        "path": "Issues",
+        "order": 90,
+        "icon": "assets/icons/issues.svg",
+        "color": "#DD4F34",
+        "viewId": "kit-observability.issues.open"
+      },
+      {
+        "path": "Stream",
+        "order": 91,
+        "icon": "assets/icons/stream.svg",
+        "color": "#3D7A64",
+        "viewId": "kit-observability.stream.open"
+      },
+      {
+        "path": "Auditoría",
+        "order": 92,
+        "icon": "assets/icons/audit.svg",
+        "color": "#1F1F1F",
+        "viewId": "kit-observability.auditoria.open"
+      },
+      {
+        "path": "Salud",
+        "order": 93,
+        "icon": "assets/icons/health.svg",
+        "color": "#C08527",
+        "viewId": "kit-observability.salud.open"
+      },
+      {
+        "path": "Trace",
+        "order": 94,
+        "icon": "assets/icons/trace.svg",
+        "color": "#3D7A64",
+        "viewId": "kit-observability.trace.open"
+      }
+    ],
+    "views": [
+      {
+        "id": "kit-observability.issues.open",
+        "title": "Issues",
+        "component": "./dist/views/issues/index.js",
+        "export": "IssuesView",
+        "layout": "full"
+      },
+      {
+        "id": "kit-observability.stream.open",
+        "title": "Stream",
+        "component": "./dist/views/stream/index.js",
+        "export": "StreamView",
+        "layout": "full"
+      },
+      {
+        "id": "kit-observability.auditoria.open",
+        "title": "Auditoría",
+        "component": "./dist/views/audit/index.js",
+        "export": "AuditView",
+        "layout": "full"
+      },
+      {
+        "id": "kit-observability.salud.open",
+        "title": "Salud",
+        "component": "./dist/views/health/index.js",
+        "export": "HealthView",
+        "layout": "full"
+      },
+      {
+        "id": "kit-observability.trace.open",
+        "title": "Trace",
+        "component": "./dist/views/trace/index.js",
+        "export": "TraceView",
+        "layout": "full"
+      }
+    ],
+    "repositories": [],
+    "scheduledTasks": [
+      {
+        "id": "maintenance",
+        "cron": "0 * * * *",
+        "handler": "./dist/crons/maintenance.js",
+        "export": "runMaintenance"
+      },
+      {
+        "id": "retention",
+        "cron": "0 2 * * *",
+        "handler": "./dist/crons/retention.js",
+        "export": "runRetention"
+      }
+    ],
+    "httpEndpoints": [
+      {
+        "id": "traces-get",
+        "path": "/traces",
+        "method": "GET",
+        "handler": "./dist/endpoints/traces.js",
+        "export": "getTrace",
+        "auth": "jwt"
+      },
+      {
+        "id": "traces-recent",
+        "path": "/traces/recent",
+        "method": "GET",
+        "handler": "./dist/endpoints/traces-recent.js",
+        "export": "listRecentTracesEndpoint",
+        "auth": "jwt"
+      },
+      {
+        "id": "logs-query",
+        "path": "/logs/query",
+        "method": "GET",
+        "handler": "./dist/endpoints/logs-query.js",
+        "export": "queryLogsEndpoint",
+        "auth": "jwt"
+      },
+      {
+        "id": "logs-ingest",
+        "path": "/logs",
+        "method": "POST",
+        "handler": "./dist/endpoints/logs-ingest.js",
+        "export": "ingestLog",
+        "auth": "jwt"
+      },
+      {
+        "id": "issues-query",
+        "path": "/logs/issues",
+        "method": "GET",
+        "handler": "./dist/endpoints/issues-query.js",
+        "export": "queryIssuesEndpoint",
+        "auth": "jwt"
+      },
+      {
+        "id": "issues-detail",
+        "path": "/logs/issues/detail",
+        "method": "GET",
+        "handler": "./dist/endpoints/issues-detail.js",
+        "export": "getIssueDetailEndpoint",
+        "auth": "jwt"
+      },
+      {
+        "id": "issues-update",
+        "path": "/logs/issues",
+        "method": "PATCH",
+        "handler": "./dist/endpoints/issues-update.js",
+        "export": "updateIssue",
+        "auth": "jwt"
+      },
+      {
+        "id": "health-get",
+        "path": "/logs/health",
+        "method": "GET",
+        "handler": "./dist/endpoints/health.js",
+        "export": "getHealth",
+        "auth": "jwt"
+      },
+      {
+        "id": "audit-query",
+        "path": "/audit",
+        "method": "GET",
+        "handler": "./dist/endpoints/audit-query.js",
+        "export": "queryAuditEndpoint",
+        "auth": "jwt"
+      },
+      {
+        "id": "tenants-list",
+        "path": "/tenants",
+        "method": "GET",
+        "handler": "./dist/endpoints/tenants-list.js",
+        "export": "listTenantsEndpoint",
+        "auth": "jwt"
+      },
+      {
+        "id": "sources-list",
+        "path": "/sources",
+        "method": "GET",
+        "handler": "./dist/endpoints/sources-list.js",
+        "export": "listSourcesEndpoint",
+        "auth": "jwt"
+      }
+    ]
   }
 }
