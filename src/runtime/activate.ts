@@ -55,6 +55,7 @@ export async function activate(context: ModuleActivationContext): Promise<void> 
 
   const newSink = new DBSink({
     raw: systemDb.raw,
+    minLevel: config.dbMinLevel, // antes default DEBUG → persistía el ruido INFO del bridge. Ver dbMinLevel.
     batchSize: config.batchSize,
     batchIntervalMs: config.batchIntervalMs,
     failsafe,
