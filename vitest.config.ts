@@ -21,10 +21,11 @@ export default defineConfig({
   // no afecta integration tests (que usan otro config).
   resolve: {
     alias: {
-      '@coongro/plugin-sdk': path.resolve(
-        __dirname,
-        'src/test-utils/plugin-sdk.stub.ts'
-      ),
+      '@coongro/plugin-sdk': path.resolve(__dirname, 'src/test-utils/plugin-sdk.stub.ts'),
+      // `config.ts` importa `LogLevel` de core-logging (peerDep resuelta por el
+      // host en runtime). En tests unitarios standalone hay que aliasear al dist
+      // del monorepo — mismo patrón que vitest.integration.config.ts.
+      '@coongro/core-logging': path.resolve(__dirname, '../../packages/core-logging/dist/index.js'),
     },
   },
   test: {
