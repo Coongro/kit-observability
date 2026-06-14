@@ -1,6 +1,6 @@
 {
   "name": "@coongro/kit-observability",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "description": "Sistema propio de observability: logs estructurados, traces y agregación de issues. Reemplaza Winston en el API y expone HTTP endpoints + MCP tools para query.",
   "main": "dist/index.js",

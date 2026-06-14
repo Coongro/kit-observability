@@ -1,5 +1,51 @@
 # @coongro/kit-observability
 
+## 0.6.0
+
+### Minor Changes
+
+- 498d004: feat(COONG-202): DBSink persiste solo WARN+ por default (observability cost-aware)
+
+  El DBSink se creaba sin `minLevel` → default DEBUG → persistía TODO a
+  `log_entries`, incluidos los ~93% de spans INFO del otel-bridge (un log por cada
+  middleware/handler/query). Medido: ~12 filas a la DB por request, millones de
+  filas y varios GB de ruido.
+
+  Ahora `minLevel` es configurable vía `OBSERVABILITY_DB_MIN_LEVEL` (default
+  **WARN**). Con WARN, core-logging filtra INFO/DEBUG antes del sink y solo se
+  persisten spans escalados a WARN por duración (requests lentos) + warnings +
+  errores — la señal real del dashboard. Bajable a `info`/`debug` para debugging.
+
+  Verificado en vivo: 50 requests normales pasaron de +619 filas a **+0**, mientras
+  los errores se siguen persistiendo. La auditoría no se ve afectada (va por
+  `audit_events`). Cambio de comportamiento por default (de DEBUG a WARN) → minor.
+
+### Patch Changes
+
+- ab676df: fix(COONG-204): la retención de particiones usa el máximo de los thresholds, no el mínimo
+
+  `register.ts` calculaba la retención de particiones de `log_entries` con
+  `Math.min(debug, warn, error)` y se la pasaba a pg_partman, que dropea la
+  **partición entera** (todos los niveles de ese día). Con `DEBUG=2/WARN=14/ERROR=30`
+  eso dropeaba las particiones a los 2 días, **borrando los ERROR que debían vivir 30**.
+
+  Ahora usa `Math.max`: pg_partman sólo dropea cuando expiró el nivel que más tiempo
+  se conserva, y el DELETE fino de `retention.ts` hace la limpieza por-nivel dentro de
+  las particiones vivas. Verificado con un test de integración nuevo (un ERROR de hace
+  5 días sobrevive al ciclo retention + maintenance con thresholds dispares).
+
+- adaa442: fix(COONG-206): el alias de @coongro/\* en los vitest configs ahora es condicional
+
+  Los configs aliaseaban `@coongro/core-logging` (y los demás `@coongro/*`) al dist
+  del monorepo (`../../packages/...`). En el repo standalone del plugin —como corre
+  el CI— ese path no existe y `config.test.ts` rompía con `ERR_MODULE_NOT_FOUND`.
+  Como `release.yml` commitea el bump con husky activo, el pre-commit corría los
+  tests en CI, fallaban, y el release no versionaba ni publicaba.
+
+  Ahora el alias solo se aplica si el path del monorepo existe (`existsSync`); en
+  standalone se resuelve desde node_modules (instalado desde Verdaccio). Aplicado a
+  vitest.config.ts y vitest.integration.config.ts.
+
 ## 0.5.0
 
 ### Minor Changes
