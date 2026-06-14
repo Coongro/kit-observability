@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
@@ -5,6 +6,21 @@ import { defineConfig } from 'vitest/config';
  * Config para tests unitarios — sin DB. Rápido, corre en pre-commit.
  * Tests integration (con DB) usan `vitest.integration.config.ts`.
  */
+
+/**
+ * Alias de un `@coongro/*` al dist del monorepo, SOLO si ese path existe.
+ *
+ * En el monorepo los packages viven en `packages/` (no en node_modules del
+ * plugin, que usa symlinks de Docker), así que el test necesita el alias. Pero
+ * en el repo STANDALONE del plugin (como corre el CI) ese path no existe y el
+ * paquete se instala desde Verdaccio a node_modules — ahí el alias debe
+ * desaparecer para que la resolución normal funcione. Sin esto, el alias rompía
+ * los tests en el CI del plugin y bloqueaba el release (COONG-206).
+ */
+function monorepoAlias(baseDir: string, pkg: string, relDistPath: string): Record<string, string> {
+  const abs = path.resolve(baseDir, relDistPath);
+  return existsSync(abs) ? { [pkg]: abs } : {};
+}
 export default defineConfig({
   // Plugin es backend-only. Override explícito de postcss con plugins vacíos
   // para que Vite NO intente cargar `postcss.config.cjs` (que requiere
@@ -22,10 +38,14 @@ export default defineConfig({
   resolve: {
     alias: {
       '@coongro/plugin-sdk': path.resolve(__dirname, 'src/test-utils/plugin-sdk.stub.ts'),
-      // `config.ts` importa `LogLevel` de core-logging (peerDep resuelta por el
-      // host en runtime). En tests unitarios standalone hay que aliasear al dist
-      // del monorepo — mismo patrón que vitest.integration.config.ts.
-      '@coongro/core-logging': path.resolve(__dirname, '../../packages/core-logging/dist/index.js'),
+      // `config.ts` importa `LogLevel` de core-logging. En el monorepo se aliasea
+      // al dist; en el repo standalone se resuelve desde node_modules (ver
+      // monorepoAlias).
+      ...monorepoAlias(
+        __dirname,
+        '@coongro/core-logging',
+        '../../packages/core-logging/dist/index.js'
+      ),
     },
   },
   test: {
