@@ -326,4 +326,34 @@ describe.skipIf(skipIfNoDb)('runMaintenance (integration — COONG-145 acceptanc
     );
     expect(rows[0]?.count).toBe('0');
   });
+
+  it('NO dropea una partición con ERROR dentro de su ventana cuando los thresholds difieren (COONG-204)', async () => {
+    // Regresión: register.ts usaba Math.min de los thresholds para la retención
+    // de particiones → pg_partman dropeaba la partición entera (con sus ERROR)
+    // al expirar el threshold MÁS CORTO. Con el fix (Math.max) la partición
+    // sólo se dropea cuando expiró el nivel más largo.
+    const config = mockState(sql, {
+      OBSERVABILITY_RETENTION_DAYS_DEBUG: '2',
+      OBSERVABILITY_RETENTION_DAYS_WARN: '14',
+      OBSERVABILITY_RETENTION_DAYS_ERROR: '30',
+    });
+    await registerPartitions(sql, config, silentLogger);
+    await createPastPartition(sql, LOG_ENTRIES_TABLE, 5);
+
+    // ERROR (level 50) de hace 5 días: debug=2 ya expiró para ese día, pero bajo
+    // error=30 debe sobrevivir al ciclo completo retention + maintenance.
+    await sql.unsafe(
+      `INSERT INTO ${ENTRIES} (timestamp, level, source, message) VALUES ($1, 50, 'tmp204', 'error 5d')`,
+      [daysAgoTs(5)]
+    );
+
+    await runRetention({ logger: silentLogger });
+    await runMaintenance({ logger: silentLogger });
+
+    const rows = await sql.unsafe<{ message: string }[]>(
+      `SELECT message FROM ${ENTRIES} WHERE source = 'tmp204'`
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.message).toBe('error 5d');
+  });
 });
