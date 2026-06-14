@@ -6,6 +6,8 @@
  * `process.env`.
  */
 
+import { LogLevel } from '@coongro/core-logging';
+
 function positiveInt(raw: string | undefined, fallback: number, name: string): number {
   if (raw === undefined || raw === '') return fallback;
   const parsed = Number(raw);
@@ -15,12 +17,48 @@ function positiveInt(raw: string | undefined, fallback: number, name: string): n
   return parsed;
 }
 
+/** Mapa nombre→LogLevel para parsear `OBSERVABILITY_DB_MIN_LEVEL`. */
+const LOG_LEVEL_BY_NAME: Record<string, LogLevel> = {
+  debug: LogLevel.DEBUG,
+  info: LogLevel.INFO,
+  warn: LogLevel.WARN,
+  error: LogLevel.ERROR,
+  fatal: LogLevel.FATAL,
+};
+
+/**
+ * Parsea un nivel de log desde env (case-insensitive). Default `fallback`.
+ * Lanza ante un valor desconocido para que un typo en la config no degrade
+ * silenciosamente la observabilidad (p. ej. dejar de persistir errores).
+ */
+function logLevel(raw: string | undefined, fallback: LogLevel, name: string): LogLevel {
+  if (raw === undefined || raw === '') return fallback;
+  const level = LOG_LEVEL_BY_NAME[raw.trim().toLowerCase()];
+  if (level === undefined) {
+    throw new Error(
+      `[kit-observability] env ${name} must be one of ${Object.keys(LOG_LEVEL_BY_NAME).join(', ')}, got "${raw}"`
+    );
+  }
+  return level;
+}
+
 function optionalPositiveInt(raw: string | undefined, name: string): number | null {
   if (raw === undefined || raw === '') return null;
   return positiveInt(raw, 0, name);
 }
 
 export interface ObservabilityConfig {
+  /**
+   * Nivel mínimo que el DBSink persiste en `log_entries` (default WARN).
+   *
+   * El otel-bridge emite un LogEntry por cada span (middleware/handler/query),
+   * casi todos a nivel INFO: ~93% del volumen de la tabla y varios GB de storage
+   * que son ruido (un GET de 3 ms no aporta señal). Con WARN, core-logging filtra
+   * INFO/DEBUG antes del sink (ver registry `sink.minLevel`) y solo se persisten
+   * spans escalados a WARN por duración (requests lentos) + warnings + errores —
+   * la señal real del dashboard. Bajable a `info`/`debug` para debugging puntual.
+   */
+  dbMinLevel: LogLevel;
   /** Tamaño máximo del buffer del sink antes de flush automático por batch. */
   batchSize: number;
   /** Intervalo en ms entre flushes automáticos del buffer. */
@@ -47,6 +85,11 @@ export interface ObservabilityConfig {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ObservabilityConfig {
   return {
+    dbMinLevel: logLevel(
+      env.OBSERVABILITY_DB_MIN_LEVEL,
+      LogLevel.WARN,
+      'OBSERVABILITY_DB_MIN_LEVEL'
+    ),
     batchSize: positiveInt(env.OBSERVABILITY_BATCH_SIZE, 50, 'OBSERVABILITY_BATCH_SIZE'),
     batchIntervalMs: positiveInt(
       env.OBSERVABILITY_BATCH_INTERVAL_MS,

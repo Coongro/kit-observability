@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
@@ -8,23 +9,47 @@ import { defineConfig } from 'vitest/config';
  * Connection string: env `OBSERVABILITY_TEST_DB_URL` (sin default a la dev DB
  * para evitar borrar el schema observability del usuario sin querer).
  */
+
+/**
+ * Alias de un `@coongro/*` al dist del monorepo, SOLO si ese path existe. En el
+ * repo standalone (CI) el path no existe y el paquete se resuelve desde
+ * node_modules (instalado desde Verdaccio). Ver COONG-206.
+ */
+function monorepoAlias(baseDir: string, pkg: string, relDistPath: string): Record<string, string> {
+  const abs = path.resolve(baseDir, relDistPath);
+  return existsSync(abs) ? { [pkg]: abs } : {};
+}
+
 export default defineConfig({
   // Override explícito de postcss para no requerir autoprefixer en CI.
   css: {
     postcss: { plugins: [] },
   },
   resolve: {
-    // Vitest no lee tsconfig paths automáticamente — hay que mapear los
-    // workspace packages a sus dist builds para que los integration tests
-    // los puedan resolver via bare imports.
+    // Vitest no lee tsconfig paths automáticamente. En el monorepo se mapean los
+    // workspace packages a sus dist builds; en standalone se resuelven desde
+    // node_modules (ver monorepoAlias).
     alias: {
-      '@coongro/core-logging': path.resolve(__dirname, '../../packages/core-logging/dist/index.js'),
-      '@coongro/database-core': path.resolve(__dirname, '../../packages/database-core/dist/index.js'),
-      '@coongro/module-core/types/index.js': path.resolve(
+      ...monorepoAlias(
         __dirname,
+        '@coongro/core-logging',
+        '../../packages/core-logging/dist/index.js'
+      ),
+      ...monorepoAlias(
+        __dirname,
+        '@coongro/database-core',
+        '../../packages/database-core/dist/index.js'
+      ),
+      ...monorepoAlias(
+        __dirname,
+        '@coongro/module-core/types/index.js',
         '../../packages/module-core/dist/types/index.js'
       ),
-      '@coongro/module-core': path.resolve(__dirname, '../../packages/module-core/dist/index.js'),
+      ...monorepoAlias(
+        __dirname,
+        '@coongro/module-core',
+        '../../packages/module-core/dist/index.js'
+      ),
     },
   },
   test: {

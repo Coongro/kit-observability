@@ -1,6 +1,6 @@
 {
   "id": "kit-observability",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "apiVersion": "2.0",
   "runtime": "eager",
   "entry": "./dist/server.js",
