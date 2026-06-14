@@ -37,17 +37,21 @@ export async function registerPartitions(
   const manager = new PartitionManager(raw);
   await manager.initialize();
 
-  // log_entries tiene retention por nivel (DELETEs en el cron), no por partición.
-  // Para que pg_partman pueda dropear las partición tables vacías, usamos el
-  // mínimo de los tres thresholds: una partición más vieja que el más corto
-  // ya no puede tener filas de ningún nivel.
+  // log_entries tiene retention por NIVEL (DELETEs finos en el cron retention),
+  // pero pg_partman dropea la PARTICIÓN ENTERA (todos los niveles de ese día).
+  // Por eso la retención de particiones debe ser el MÁXIMO de los thresholds:
+  // una partición sólo puede dropearse cuando expiró hasta el nivel que más
+  // tiempo se conserva. Usar el mínimo (COONG-204) borraba prematuramente los
+  // niveles altos — p.ej. con DEBUG=2/WARN=14/ERROR=30, el drop a 2 días se
+  // llevaba los ERROR que debían vivir 30. El DELETE fino de retention.ts hace
+  // la limpieza por-nivel dentro de las particiones que todavía no se dropearon.
   const entriesRetentionCandidates = [
     config.retentionDaysDebug,
     config.retentionDaysWarn,
     config.retentionDaysError,
   ].filter((v): v is number => v !== null);
   const entriesPartitionRetention =
-    entriesRetentionCandidates.length > 0 ? Math.min(...entriesRetentionCandidates) : null;
+    entriesRetentionCandidates.length > 0 ? Math.max(...entriesRetentionCandidates) : null;
 
   const partitioned: {
     tableName: string;
