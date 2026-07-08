@@ -83,6 +83,25 @@ export interface ObservabilityConfig {
   retentionDaysSpans: number | null;
 }
 
+/**
+ * Master kill-switch del plugin. Cuando `OBSERVABILITY_DISABLED=1`, `activate()`
+ * retorna temprano y el plugin NO registra nada que toque la DB: sin bootstrap,
+ * sin sinks (DBSink/SpanSink), sin crons efectivos, sin audit recorder.
+ *
+ * Pensado como palanca operacional reset-proof y 100% por env var: a diferencia
+ * del toggle por-tenant (`PATCH .../plugins/.../status`), NO necesita la DB
+ * arriba ni enumerar tenants, y sobrevive reinicios/redeploys. Útil cuando la
+ * persistencia de observabilidad está drenando el compute de la DB (Neon free
+ * tier) y hay que cortarla del todo sin desinstalar.
+ *
+ * Se lee directo de env (no vía `loadConfig`) a propósito: un kill-switch no
+ * debe depender de que el resto de la config parsee bien — si otra env var
+ * estuviera malformada, `loadConfig` lanzaría y el switch no podría leerse.
+ */
+export function isObservabilityDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.OBSERVABILITY_DISABLED === '1';
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ObservabilityConfig {
   return {
     dbMinLevel: logLevel(
