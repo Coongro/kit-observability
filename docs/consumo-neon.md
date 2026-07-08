@@ -130,16 +130,18 @@ persistiendo todo). Al re-encender en prod:
 
 ---
 
-## Ojo: observability no es el único que mantiene la DB despierta
+## Ojo: observability no es el único que puede mantener la DB despierta
 
 El drenaje de compute puede venir también del **core**, no solo de este plugin.
-El sospechoso principal es el **dispatcher de notificaciones agendadas**
-(`apps/api/src/notifications/scheduled-notifications.dispatcher.ts`), que corre
-**cada 1 min** un `SELECT … FROM tenants` + `claimDue` por tenant de forma
-incondicional: por sí solo alcanza para que la DB no duerma nunca. Si tras apagar
-observability la línea de compute sigue activa 24/7, revisá ahí (y los crons
-horarios de sso-cleanup / updates-check / maintenance / telegram: alinéalos al
-mismo minuto para que sea 1 despertar/hora en vez de 4).
+El dispatcher de notificaciones agendadas
+(`apps/api/src/notifications/scheduled-notifications.dispatcher.ts`) **ya no**
+es la causa: hasta COONG-203 corría cada 1 min de forma incondicional, pero ese
+polling se reemplazó por un scheduler event-driven (`setTimeout` al próximo
+`due` + red de seguridad horaria) — ya no despierta la DB por sí solo. Si tras
+apagar observability la línea de compute sigue activa 24/7, el sospechoso es
+otro: revisá los crons horarios (sso-cleanup / updates-check / maintenance /
+telegram — alinéalos al mismo minuto para que sea 1 despertar/hora en vez de 4)
+o `DATABASE_KEEPALIVE_MS` seteado a mano en Railway.
 
 ---
 
