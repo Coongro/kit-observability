@@ -2,13 +2,13 @@ import type { Sql } from 'postgres';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../runtime/state.js', () => ({
-  getRuntimeState: vi.fn(),
+  getRuntimeStateOrNull: vi.fn(),
 }));
 
 import { runBootstrap } from '../bootstrap/run-bootstrap.js';
 import { loadConfig } from '../config.js';
 import { registerPartitions } from '../partitions/register.js';
-import { getRuntimeState } from '../runtime/state.js';
+import { getRuntimeStateOrNull } from '../runtime/state.js';
 import { LOG_ENTRIES_TABLE } from '../schema/log-entries.js';
 import { LOG_SPANS_TABLE } from '../schema/log-spans.js';
 import { OBSERVABILITY_SCHEMA_NAME } from '../schema/observability-schema.js';
@@ -31,15 +31,15 @@ const ENTRIES = `"${S}"."${LOG_ENTRIES_TABLE}"`;
 const SPANS = `"${S}"."${LOG_SPANS_TABLE}"`;
 
 /**
- * Monta el estado de runtime que los handlers leen via getRuntimeState().
+ * Monta el estado de runtime que los handlers leen via getRuntimeStateOrNull().
  * Solo se usan systemDb.raw + config — el resto del RuntimeState no se toca.
  */
 function mockState(sql: Sql, envOverrides: Record<string, string> = {}) {
   const config = loadConfig(envOverrides);
-  vi.mocked(getRuntimeState).mockReturnValue({
+  vi.mocked(getRuntimeStateOrNull).mockReturnValue({
     systemDb: { raw: sql },
     config,
-  } as unknown as ReturnType<typeof getRuntimeState>);
+  } as unknown as ReturnType<typeof getRuntimeStateOrNull>);
   return config;
 }
 
