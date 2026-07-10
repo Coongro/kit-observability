@@ -9,6 +9,12 @@ jobs:
     name: Version or Publish
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # El commit del bump que hace changesets/action NO debe disparar los hooks de
+    # husky: el pre-commit corre `npm run quality`, cuyo format:check falla en CI
+    # por el prettier flotante (npm install baja 3.9.x). Un commit mecánico de bot
+    # no pasa por el gate de calidad de dev — HUSKY=0 lo desactiva para todo el job.
+    env:
+      HUSKY: 0
     permissions:
       contents: write
       pull-requests: write
