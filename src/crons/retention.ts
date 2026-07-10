@@ -1,6 +1,6 @@
 import type { Sql } from 'postgres';
 
-import { getRuntimeState } from '../runtime/state.js';
+import { getRuntimeStateOrNull } from '../runtime/state.js';
 import { LOG_ENTRIES_TABLE, LOG_SPANS_TABLE, OBSERVABILITY_SCHEMA_NAME } from '../schema/index.js';
 
 /**
@@ -63,7 +63,15 @@ async function deleteOlderThan(
  * no hay presión de disco y se quiere conservar todo el historial para debugging.
  */
 export async function runRetention({ logger }: ScheduledTaskContext): Promise<void> {
-  const { systemDb, config } = getRuntimeState();
+  // No-op limpio si el plugin no está activo (OBSERVABILITY_DISABLED=1 o aún sin
+  // activar): sin runtime state no hay nada que purgar. Evita el throw de
+  // getRuntimeState() que el cron loader registraría como error.
+  const state = getRuntimeStateOrNull();
+  if (state === null) {
+    logger.info('retention omitido — plugin inactivo');
+    return;
+  }
+  const { systemDb, config } = state;
   const { raw } = systemDb;
   const ageWindow = "timestamp < NOW() - ($1 || ' days')::interval";
   const deleted: Record<string, number> = {};
