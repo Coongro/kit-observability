@@ -1,6 +1,6 @@
 import { PartitionManager } from '@coongro/database-core';
 
-import { getRuntimeState } from '../runtime/state.js';
+import { getRuntimeStateOrNull } from '../runtime/state.js';
 
 /**
  * Subset del `ScheduledTaskContext` de `@coongro/module-core` que necesita
@@ -33,7 +33,15 @@ interface ScheduledTaskContext {
  * sin tocar este archivo: solo wrapping con telemetría.
  */
 export async function runMaintenance({ logger }: ScheduledTaskContext): Promise<void> {
-  const { systemDb } = getRuntimeState();
+  // No-op limpio si el plugin no está activo (OBSERVABILITY_DISABLED=1 o aún sin
+  // activar): sin runtime state no hay systemDb que tocar. Evita el throw de
+  // getRuntimeState() que el cron loader registraría como error cada hora.
+  const state = getRuntimeStateOrNull();
+  if (state === null) {
+    logger.info('partition maintenance omitido — plugin inactivo');
+    return;
+  }
+  const { systemDb } = state;
   const manager = new PartitionManager(systemDb.raw);
   await manager.initialize();
   await manager.runMaintenance();
